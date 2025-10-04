@@ -263,4 +263,209 @@ document.addEventListener('DOMContentLoaded', () => {
       computeActiveByScroll();
     }
   }
+
+  // Mobile sidebar toggle
+  const navToggleButtons = Array.from(document.querySelectorAll('[data-nav-toggle]'));
+  const navScrim = document.querySelector('[data-nav-scrim]');
+  const primarySidebar = document.getElementById('primary-sidebar');
+  const navMediaQuery = window.matchMedia('(max-width: 768px)');
+
+  if (navToggleButtons.length) {
+    const setNavOpen = (open) => {
+      const allowOpen = open && navMediaQuery.matches;
+      const targetState = allowOpen;
+
+      document.body.classList.toggle('nav-open', targetState);
+
+      navToggleButtons.forEach((button) => {
+        button.setAttribute('aria-expanded', targetState ? 'true' : 'false');
+      });
+
+      if (navScrim) {
+        if (targetState) {
+          navScrim.removeAttribute('hidden');
+        } else {
+          navScrim.setAttribute('hidden', 'hidden');
+        }
+      }
+    };
+
+    const toggleNav = () => {
+      const isOpen = document.body.classList.contains('nav-open');
+      setNavOpen(!isOpen);
+    };
+
+    navToggleButtons.forEach((button) => {
+      button.addEventListener('click', toggleNav);
+    });
+
+    navScrim?.addEventListener('click', () => setNavOpen(false));
+
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        setNavOpen(false);
+      }
+    });
+
+    const handleNavMediaChange = () => {
+      if (!navMediaQuery.matches) {
+        setNavOpen(false);
+      }
+    };
+
+    if (typeof navMediaQuery.addEventListener === 'function') {
+      navMediaQuery.addEventListener('change', handleNavMediaChange);
+    } else if (typeof navMediaQuery.addListener === 'function') {
+      navMediaQuery.addListener(handleNavMediaChange);
+    }
+
+    if (primarySidebar) {
+      const sidebarLinks = Array.from(primarySidebar.querySelectorAll('a')); 
+      sidebarLinks.forEach((link) => {
+        link.addEventListener('click', () => {
+          if (navMediaQuery.matches) {
+            setNavOpen(false);
+          }
+        });
+      });
+    }
+  }
+
+  // Dashboard notification popover toggle.
+  const notificationContainer = document.querySelector('[data-notification]');
+
+  if (notificationContainer) {
+    const notificationToggle = notificationContainer.querySelector('[data-notification-toggle]');
+    const notificationPanel = notificationContainer.querySelector('[data-notification-panel]');
+    const notificationDot = notificationContainer.querySelector('.notification-dot');
+    const markReadButton = notificationContainer.querySelector('[data-notification-mark-read]');
+
+    let notificationsOpen = false;
+
+    const setNotificationOpen = (open) => {
+      if (!notificationToggle || !notificationPanel) return;
+      notificationsOpen = Boolean(open);
+      notificationContainer.dataset.open = notificationsOpen ? 'true' : 'false';
+      notificationToggle.setAttribute('aria-expanded', notificationsOpen ? 'true' : 'false');
+      notificationPanel.hidden = !notificationsOpen;
+      if (notificationsOpen) {
+        notificationPanel?.focus?.({ preventScroll: true });
+      }
+    };
+
+    setNotificationOpen(false);
+
+    notificationToggle?.addEventListener('click', (event) => {
+      event.preventDefault();
+      setNotificationOpen(!notificationsOpen);
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!notificationsOpen) return;
+      if (!notificationContainer.contains(event.target)) {
+        setNotificationOpen(false);
+      }
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && notificationsOpen) {
+        setNotificationOpen(false);
+        notificationToggle?.focus({ preventScroll: true });
+      }
+    });
+
+    markReadButton?.addEventListener('click', () => {
+      markReadButton.textContent = 'All caught up';
+      markReadButton.setAttribute('aria-disabled', 'true');
+      markReadButton.classList.add('is-disabled');
+      if (notificationDot && !notificationDot.hasAttribute('hidden')) {
+        notificationDot.setAttribute('hidden', 'hidden');
+      }
+    });
+  }
+
+  // Auth card mode toggle (login <-> signup) on profile page.
+  const authCard = document.querySelector('.auth-card');
+  if (authCard) {
+    const authTitle = authCard.querySelector('[data-auth-title]');
+    const loginForm = authCard.querySelector('.auth-form-login');
+    const signupForm = authCard.querySelector('.auth-form-signup');
+    const loginFooter = authCard.querySelector('.auth-footer-login');
+    const signupFooter = authCard.querySelector('.auth-footer-signup');
+    const switchLinks = Array.from(authCard.querySelectorAll('[data-auth-switch]'));
+
+    const setAuthMode = (mode) => {
+      const normalized = mode === 'signup' ? 'signup' : 'login';
+      authCard.setAttribute('data-auth-mode', normalized);
+
+      if (authTitle) {
+        authTitle.textContent = normalized === 'signup' ? 'Sign Up' : 'Log In';
+      }
+
+      if (loginForm) {
+        if (normalized === 'login') {
+          loginForm.removeAttribute('hidden');
+        } else {
+          loginForm.setAttribute('hidden', 'hidden');
+        }
+      }
+
+      if (signupForm) {
+        if (normalized === 'signup') {
+          signupForm.removeAttribute('hidden');
+        } else {
+          signupForm.setAttribute('hidden', 'hidden');
+        }
+      }
+
+      if (loginFooter) {
+        loginFooter.hidden = normalized !== 'login';
+      }
+
+      if (signupFooter) {
+        signupFooter.hidden = normalized !== 'signup';
+      }
+    };
+
+    switchLinks.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const { authSwitch } = link.dataset;
+        setAuthMode(authSwitch === 'signup' ? 'signup' : 'login');
+      });
+    });
+
+    setAuthMode(authCard.getAttribute('data-auth-mode') || 'login');
+  }
+
+  // Password visibility toggles ("spy" buttons) on auth forms.
+  const passwordToggleButtons = Array.from(document.querySelectorAll('[data-password-toggle]'));
+
+  if (passwordToggleButtons.length) {
+    passwordToggleButtons.forEach((button) => {
+      const targetId = button.dataset.passwordToggle;
+      const input = (targetId && document.getElementById(targetId))
+        || button.closest('.auth-field-input')?.querySelector('input[data-password-field]');
+
+      if (!input) {
+        return;
+      }
+
+      const setVisibility = (visible) => {
+        input.type = visible ? 'text' : 'password';
+        button.dataset.visible = visible ? 'true' : 'false';
+        button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+        button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+      };
+
+      // Initialize to the input's current type.
+      setVisibility(input.type === 'text');
+
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const isVisible = button.dataset.visible === 'true';
+        setVisibility(!isVisible);
+      });
+    });
+  }
 });

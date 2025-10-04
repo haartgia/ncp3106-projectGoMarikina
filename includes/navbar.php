@@ -8,13 +8,14 @@
   $isHome = $currentPath === 'index.php';
   $isCreateReport = $currentPath === 'create-report.php';
   $isDashboard = $currentPath === 'dashboard.php';
+  $isProfile = $currentPath === 'profile.php';
 
   // When already on the dashboard we use in-page anchors; otherwise link back to index.
   $homeHref = $isHome ? '#top' : 'index.php#top';
   $reportsHref = $isHome ? '#reports' : 'index.php#reports';
 ?>
 
-<aside class="sidebar" aria-label="Primary navigation">
+<aside id="primary-sidebar" class="sidebar" aria-label="Primary navigation">
   <div class="sidebar-profile">
     <div class="sidebar-avatar" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -24,7 +25,6 @@
     </div>
     <div class="sidebar-profile-text">
       <span class="sidebar-greeting">Miguel</span>
-      <span class="sidebar-role">Administrator</span>
     </div>
   </div>
 
@@ -61,6 +61,15 @@
         </svg>
       </span>
       <span class="sidebar-label">Dashboard</span>
+    </a>
+    <a class="sidebar-link<?= $isProfile ? ' active' : '' ?>" href="profile.php"<?= $isProfile ? ' aria-current="page"' : '' ?>>
+      <span class="sidebar-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+        </svg>
+      </span>
+      <span class="sidebar-label">Profile</span>
     </a>
   </nav>
 

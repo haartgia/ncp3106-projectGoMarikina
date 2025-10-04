@@ -242,7 +242,7 @@
         </main>
 
     <!-- Floating action button stays pinned bottom-right -->
-    <button type="button" class="floating-action" aria-label="Create a new report">
+    <button type="button" class="floating-action" aria-label="Create a new report" onclick="window.location.href='create-report.php'">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                 <rect x="11" y="5" width="2" height="14" rx="1" />
                 <rect x="5" y="11" width="14" height="2" rx="1" />

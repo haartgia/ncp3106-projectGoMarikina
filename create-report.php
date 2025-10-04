@@ -194,17 +194,23 @@ session_start();
                     img.onload = () => {
                         const ctx = canvas.getContext('2d');
                         
-                        const maxWidth = 600;
-                        const maxHeight = 400;
+                        // Calculate size to fit in viewport while maintaining aspect ratio
+                        const maxWidth = Math.min(600, window.innerWidth * 0.8);
+                        const maxHeight = Math.min(400, window.innerHeight * 0.7);
                         const scale = Math.min(maxWidth / img.width, maxHeight / img.height);
                         
-                        canvas.style.width = (img.width * scale) + 'px';
-                        canvas.style.height = (img.height * scale) + 'px';
+                        // Set display size
+                        canvas.style.width = Math.round(img.width * scale) + 'px';
+                        canvas.style.height = Math.round(img.height * scale) + 'px';
+                        
+                        // Set actual canvas size to match original image
                         canvas.width = img.width;
                         canvas.height = img.height;
                         
+                        // Draw image
                         ctx.drawImage(img, 0, 0);
                         
+                        // Initialize crop box with scaled dimensions
                         initializeCropBox(img.width * scale, img.height * scale);
                         cropImage = img;
                     };
@@ -221,17 +227,18 @@ session_start();
                     const aspectRatio = 8/4;
                     
                     // Calculate maximum possible size while maintaining 8:4 ratio
-                    let cropWidth, cropHeight;
-                    
-                    // Try to fit the full width first
-                    cropWidth = imageWidth * 0.95; // Use 95% of image width
-                    cropHeight = cropWidth / aspectRatio;
+                    let cropWidth = imageWidth;
+                    let cropHeight = cropWidth / aspectRatio;
                     
                     // If height exceeds image bounds, scale down based on height
-                    if (cropHeight > imageHeight * 0.95) {
-                        cropHeight = imageHeight * 0.95; // Use 95% of image height
+                    if (cropHeight > imageHeight) {
+                        cropHeight = imageHeight;
                         cropWidth = cropHeight * aspectRatio;
                     }
+                    
+                    // Scale down slightly to ensure it fits within the image
+                    cropWidth *= 0.95;
+                    cropHeight *= 0.95;
                     
                     // Center the crop box
                     const left = (imageWidth - cropWidth) / 2;

@@ -1,378 +1,266 @@
-let lastScrollY = window.scrollY;
-const navbar = document.querySelector('.navbar-wrapper');
+document.addEventListener('DOMContentLoaded', () => {
+  const searchForm = document.querySelector('.dashboard-search');
+  const searchInput = document.querySelector('#reportSearch');
+  const reportsList = document.querySelector('.reports-list');
+  const reportCards = Array.from(document.querySelectorAll('.report-card'));
 
-window.addEventListener('scroll', () => {
-    if (!navbar || navbar.classList.contains('search-hidden')) {
-        lastScrollY = window.scrollY;
-        return;
+  const filterToggle = document.querySelector('.filter-toggle');
+  const filterMenu = document.getElementById('reportFilterMenu');
+  const filterOptions = filterMenu ? Array.from(filterMenu.querySelectorAll('.filter-option')) : [];
+  const filterLabel = filterToggle?.querySelector('span');
+
+  let activeStatus = 'all';
+  let lastManualStatus = 'all';
+  let noResultsMessage = null;
+
+  // Cache searchable text and normalize status attributes once on load.
+  reportCards.forEach((card) => {
+    if (!card.dataset.searchText) {
+      card.dataset.searchText = card.textContent.toLowerCase();
+    }
+    if (!card.dataset.status) {
+      card.dataset.status = (card.getAttribute('data-status') || '').toLowerCase();
+    }
+  });
+
+  // Lazily insert the "no results" element when needed.
+  const ensureNoResultsMessage = () => {
+    if (!reportsList) return null;
+    if (!noResultsMessage) {
+      noResultsMessage = document.createElement('div');
+      noResultsMessage.className = 'reports-empty-state';
+      noResultsMessage.textContent = reportsList.dataset.emptyMessage || 'No reports match your filters yet.';
+      noResultsMessage.style.display = 'none';
+      reportsList.appendChild(noResultsMessage);
+    }
+    return noResultsMessage;
+  };
+
+  const setNoResultsVisible = (visible) => {
+    const message = ensureNoResultsMessage();
+    if (message) {
+      message.style.display = visible ? 'flex' : 'none';
+    }
+  };
+
+  // Detect keywords like "resolved" in the search box and map them to a status filter.
+  const mapQueryToStatus = (query) => {
+    if (!query) return null;
+    const normalized = query.toLowerCase();
+    const contains = (word) => new RegExp(`\\b${word}\\b`).test(normalized);
+
+    if (contains('unresolved') || contains('unsolved') || contains('pending')) {
+      return 'unresolved';
     }
 
-    if (window.scrollY > lastScrollY) {
-        // Scrolling down
-        navbar.classList.add('hidden');
-    } else {
-        // Scrolling up
-        navbar.classList.remove('hidden');
+    if (contains('solved') || contains('resolved')) {
+      return 'solved';
     }
-    lastScrollY = window.scrollY;
-});
 
-// Modal Functions
-function openModal(modalId) {
-    document.getElementById(modalId).style.display = "block";
-}
+    return null;
+  };
 
-function closeModal(modalId) {
-    document.getElementById(modalId).style.display = "none";
-}
+  // Strip status keywords from the free-text portion so we don't double-filter.
+  const removeStatusWords = (query) => {
+    if (!query) return '';
+    return query
+      .replace(/\b(solved|resolved|unsolved|unresolved|pending)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
 
-function openLogin() {
-    openModal("loginModal");
-}
+  // Sync the filter pill UI and aria state with the active status.
+  const updateFilterUI = (status, { inferred = false } = {}) => {
+    if (filterOptions.length) {
+      filterOptions.forEach((option) => {
+        const isActive = option.dataset.status === status;
+        option.classList.toggle('active', isActive);
+        option.setAttribute('aria-checked', isActive ? 'true' : 'false');
+      });
+    }
 
-function openForgotPassword() {
-    closeModal("loginModal");
-    openModal("forgotModal");
-}
+    if (filterLabel) {
+      filterLabel.textContent = status === 'all' ? 'Filter' : `Filter: ${status.charAt(0).toUpperCase()}${status.slice(1)}`;
+      filterLabel.dataset.inferred = inferred ? 'true' : 'false';
+    }
+  };
 
-function openSignup() {
-    closeModal("loginModal");
-    window.location.href = "signup.php";
-}
+  const closeFilterMenu = () => {
+    if (!filterMenu || !filterToggle) return;
+    filterMenu.hidden = true;
+    filterToggle.setAttribute('aria-expanded', 'false');
+  };
 
-function openCreateReport() {
-    openModal("createReportModal");
-}
+  // Core filter pipeline: apply status + search text and toggle cards.
+  const applyFilters = () => {
+    const rawQuery = (searchInput?.value || '').trim();
+    const normalizedQuery = rawQuery.toLowerCase();
+    const statusFromQuery = mapQueryToStatus(normalizedQuery);
 
-// Report Modal Data
-const reportData = {
-  1: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "UNRESOLVED",
-    author: "Miguel De Guzman | Community",
-    description: "The road construction at Bulelak Street has been dragging on and it's making life harder for us residents—traffic everywhere, hard to get in and out of our homes, and no clear updates on when this will be finished."
-  },
-  2: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "UNRESOLVED",
-    author: "Miguel De Guzman | Community",
-    description: "Flooding along Sumulong has become a serious problem affecting our daily lives and safety. Every time it rains heavily, the water level rises quickly."
-  },
-  3: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "SOLVED",
-    author: "Miguel De Guzman | Community",
-    description: "Grabe na 'yung illegal parking dito sa area—halos kalagihati ng kalsada natatakpan na ng mga sasakyang nakaparada. This has been resolved by local authorities."
-  },
-  4: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "UNRESOLVED",
-    author: "Maria Santos | Infrastructure",
-    description: "Bridge maintenance needed for safety concerns. The structure shows signs of wear and requires immediate attention."
-  },
-  5: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "SOLVED",
-    author: "Juan Dela Cruz | Environment",
-    description: "Garbage collection issue has been resolved. Regular pickup schedule has been restored in the area."
-  },
-  6: {
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-nnvLXZXV5lY4EPcfVxRvpqbcXUHcwp.png",
-    status: "UNRESOLVED",
-    author: "Ana Rodriguez | Community",
-    description: "Street lighting needs improvement for public safety. Several lamp posts are not working, making the area dark at night."
-  }
-};
+    if (statusFromQuery && statusFromQuery !== activeStatus) {
+      activeStatus = statusFromQuery;
+      updateFilterUI(activeStatus, { inferred: true });
+    } else if (!statusFromQuery) {
+      updateFilterUI(activeStatus, { inferred: false });
+    }
 
-function openReportModal(reportId) {
-  const report = reportData[reportId];
-  if (report) {
-    document.getElementById("reportImage").src = report.image;
-    document.getElementById("reportStatus").textContent = report.status;
-    document.getElementById("reportStatus").className = report.status.toLowerCase();
-    document.getElementById("reportAuthor").textContent = report.author;
-    document.getElementById("reportDescription").textContent = report.description;
-    openModal("reportModal");
-  }
-}
-
-// Close modals when clicking outside
-document.addEventListener("DOMContentLoaded", () => {
-    const descriptions = document.querySelectorAll(".report-description");
-    descriptions.forEach((desc) => {
-        const words = desc.textContent.trim().split(/\s+/);
-        if (words.length >= 20) {
-            const truncated = words.slice(0, 20).join(" ");
-            desc.textContent = `${truncated} ....`;
-        }
-    });
-
-    window.addEventListener("click", (event) => {
-        const modals = document.querySelectorAll(".modal");
-        modals.forEach((modal) => {
-            if (event.target === modal) {
-                modal.style.display = "none";
-            }
-        });
-    });
-
-    const navWrapper = document.querySelector('.navbar-wrapper');
-    const navSearchTrigger = document.querySelector('.nav-search-trigger');
-    const navSearchOverlay = document.querySelector('.navbar-search-overlay');
-    const navSearchClose = document.querySelector('.navbar-search-close');
-    const navSearchInput = document.getElementById('navbarSearchInput');
-    const navSearchForm = document.querySelector('.navbar-search-form');
-
-    const reportsGrid = document.querySelector('.reports-grid');
-    const reportCards = reportsGrid ? Array.from(reportsGrid.querySelectorAll('.report-card')) : [];
-    let noResultsMessage = null;
-    let currentSearchQuery = '';
-    let currentStatusFilter = 'all';
+    const textQuery = removeStatusWords(normalizedQuery);
+    let visibleCount = 0;
 
     reportCards.forEach((card) => {
-        if (!card.dataset.searchText) {
-            card.dataset.searchText = card.textContent.toLowerCase();
-        }
+      const cardStatus = card.dataset.status || 'all';
+      const matchesStatus = activeStatus === 'all' || cardStatus === activeStatus;
+      const matchesSearch = !textQuery || (card.dataset.searchText || '').includes(textQuery);
 
-        if (!card.dataset.status) {
-            const statusElement = card.querySelector('.report-status');
-            if (statusElement) {
-                card.dataset.status = statusElement.textContent.trim().toLowerCase();
-            }
-        }
+      if (matchesStatus && matchesSearch) {
+        card.style.removeProperty('display');
+        visibleCount += 1;
+      } else {
+        card.style.display = 'none';
+      }
     });
 
-    const getOrCreateNoResultsMessage = () => {
-        if (!reportsGrid) return null;
-        if (!noResultsMessage) {
-            noResultsMessage = document.createElement('div');
-            noResultsMessage.className = 'reports-empty-state';
-            noResultsMessage.textContent = 'No reports match your filters yet.';
-            reportsGrid.appendChild(noResultsMessage);
-        }
-        return noResultsMessage;
-    };
+    setNoResultsVisible(visibleCount === 0);
+  };
 
-    const updateNoResultsVisibility = (visibleCount) => {
-        const message = getOrCreateNoResultsMessage();
-        if (message) {
-            message.style.display = visibleCount ? 'none' : 'flex';
-        }
-    };
+  // Toggle filter popover visibility.
+  filterToggle?.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (!filterMenu) return;
+    const expanded = filterToggle.getAttribute('aria-expanded') === 'true';
+    filterMenu.hidden = expanded;
+    filterToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+  });
 
-    const applyFilters = () => {
-        if (!reportsGrid) return;
-
-        let matches = 0;
-        reportCards.forEach((card) => {
-            const searchText = card.dataset.searchText || '';
-            const status = card.dataset.status || '';
-            const matchesSearch = !currentSearchQuery || searchText.includes(currentSearchQuery);
-            const matchesStatus = currentStatusFilter === 'all' || status === currentStatusFilter;
-
-            if (matchesSearch && matchesStatus) {
-                card.style.removeProperty('display');
-                matches += 1;
-            } else {
-                card.style.display = 'none';
-            }
-        });
-
-        updateNoResultsVisibility(matches);
-    };
-
-    const resetSearchFilters = () => {
-        currentSearchQuery = '';
-        if (navSearchInput) {
-            navSearchInput.value = '';
-        }
-        applyFilters();
-    };
-
-    const openNavbarSearch = () => {
-        if (navWrapper) {
-            navWrapper.classList.add('search-hidden');
-            navWrapper.classList.remove('hidden');
-        }
-
-        if (navSearchOverlay) {
-            navSearchOverlay.classList.add('active');
-            navSearchOverlay.setAttribute('aria-hidden', 'false');
-        }
-
-        if (navSearchInput) {
-            navSearchInput.value = '';
-            navSearchInput.focus();
-        }
-
-        resetSearchFilters();
-
-        document.addEventListener('mousedown', handleOutsideClick);
-        document.addEventListener('touchstart', handleOutsideClick);
-    };
-
-    const closeNavbarSearch = () => {
-        if (navSearchOverlay) {
-            navSearchOverlay.classList.remove('active');
-            navSearchOverlay.setAttribute('aria-hidden', 'true');
-        }
-
-        if (navWrapper) {
-            navWrapper.classList.remove('search-hidden');
-            navWrapper.classList.remove('hidden');
-        }
-
-        if (navSearchInput) {
-            navSearchInput.value = '';
-        }
-
-        resetSearchFilters();
-
-        if (navSearchTrigger) {
-            navSearchTrigger.focus();
-        }
-
-        document.removeEventListener('mousedown', handleOutsideClick);
-        document.removeEventListener('touchstart', handleOutsideClick);
-    };
-
-    navSearchTrigger?.addEventListener('click', (event) => {
-        event.preventDefault();
-        openNavbarSearch();
-    });
-
-    navSearchClose?.addEventListener('click', (event) => {
-        event.preventDefault();
-        closeNavbarSearch();
-    });
-
-    navSearchForm?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        currentSearchQuery = (navSearchInput?.value || '').trim().toLowerCase();
-        applyFilters();
-    });
-
-    navSearchInput?.addEventListener('input', (event) => {
-        currentSearchQuery = event.target.value.trim().toLowerCase();
-        applyFilters();
-    });
-
-    navSearchOverlay?.addEventListener('click', (event) => {
-        if (event.target === navSearchOverlay) {
-            closeNavbarSearch();
-        }
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && navSearchOverlay?.classList.contains('active')) {
-            closeNavbarSearch();
-        }
-    });
-
-    function handleOutsideClick(event) {
-        if (!navSearchOverlay?.classList.contains('active')) {
-            return;
-        }
-
-        const clickedInsideOverlay = navSearchOverlay.contains(event.target);
-        const clickedTrigger = navSearchTrigger?.contains(event.target);
-
-        if (!clickedInsideOverlay && !clickedTrigger) {
-            closeNavbarSearch();
-        }
-    }
-
-    const filterControl = document.querySelector('.reports-filter-control');
-    const filterButton = filterControl?.querySelector('.filter-btn');
-    const filterDropdown = filterControl?.querySelector('.filter-dropdown');
-    const filterOptions = filterDropdown ? Array.from(filterDropdown.querySelectorAll('.filter-option')) : [];
-    const defaultFilterLabel = filterButton?.dataset.defaultLabel || filterButton?.textContent.trim();
-
-    const updateFilterButtonLabel = () => {
-        if (!filterButton) return;
-        if (currentStatusFilter === 'all') {
-            filterButton.textContent = defaultFilterLabel;
-        } else {
-            const activeOption = filterOptions.find((option) => option.dataset.filter === currentStatusFilter);
-            const label = activeOption?.dataset.label || currentStatusFilter;
-            filterButton.textContent = `${defaultFilterLabel}: ${label}`;
-        }
-    };
-
-    const closeFilterDropdown = () => {
-        if (!filterDropdown || !filterButton) return;
-        filterDropdown.classList.remove('open');
-        filterDropdown.hidden = true;
-        filterButton.setAttribute('aria-expanded', 'false');
-        document.removeEventListener('mousedown', handleFilterOutsideClick);
-        document.removeEventListener('keydown', handleFilterEscape);
-    };
-
-    const openFilterDropdown = () => {
-        if (!filterDropdown || !filterButton) return;
-        filterDropdown.hidden = false;
-        filterDropdown.classList.add('open');
-        filterButton.setAttribute('aria-expanded', 'true');
-        document.addEventListener('mousedown', handleFilterOutsideClick);
-        document.addEventListener('keydown', handleFilterEscape);
-    };
-
-    const toggleFilterDropdown = () => {
-        if (!filterDropdown || !filterButton) return;
-        if (filterDropdown.classList.contains('open')) {
-            closeFilterDropdown();
-        } else {
-            openFilterDropdown();
-        }
-    };
-
-    const handleFilterOutsideClick = (event) => {
-        if (!filterControl?.contains(event.target)) {
-            closeFilterDropdown();
-        }
-    };
-
-    const handleFilterEscape = (event) => {
-        if (event.key === 'Escape') {
-            closeFilterDropdown();
-            filterButton?.focus();
-        }
-    };
-
-    filterButton?.addEventListener('click', (event) => {
-        event.preventDefault();
-        toggleFilterDropdown();
-    });
-
-    filterOptions.forEach((option) => {
-        option.addEventListener('click', () => {
-            const selectedFilter = option.dataset.filter || 'all';
-            currentStatusFilter = selectedFilter;
-
-            filterOptions.forEach((opt) => {
-                const isActive = opt === option;
-                opt.classList.toggle('active', isActive);
-                opt.setAttribute('aria-checked', isActive ? 'true' : 'false');
-            });
-
-            updateFilterButtonLabel();
-            applyFilters();
-            closeFilterDropdown();
-        });
-    });
-
-    updateFilterButtonLabel();
-    applyFilters();
-});
-
-// Form submissions
-document.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const form = e.target;
-    if (form.classList.contains('navbar-search-form')) {
+  // Clicking an option locks the status until the user clears it.
+  filterOptions.forEach((option) => {
+    option.addEventListener('click', () => {
+      const { status } = option.dataset;
+      if (!status || status === activeStatus) {
+        closeFilterMenu();
         return;
+      }
+
+      activeStatus = status;
+      lastManualStatus = status;
+      updateFilterUI(activeStatus, { inferred: false });
+      applyFilters();
+      closeFilterMenu();
+    });
+  });
+
+  // Close the filter menu when clicking outside of it.
+  document.addEventListener('click', (event) => {
+    if (!filterMenu || filterMenu.hidden) return;
+    const withinMenu = filterMenu.contains(event.target);
+    const withinToggle = filterToggle?.contains(event.target);
+    if (!withinMenu && !withinToggle) {
+      closeFilterMenu();
     }
-    const formData = new FormData(form);
-    console.log("Form submitted:", Object.fromEntries(formData));
-    alert("Form submitted successfully!");
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeFilterMenu();
+    }
+  });
+
+  // Typing triggers live filtering and restores manual status when cleared.
+  searchInput?.addEventListener('input', () => {
+    if (!searchInput.value.trim() && lastManualStatus !== activeStatus) {
+      activeStatus = lastManualStatus;
+      updateFilterUI(activeStatus, { inferred: false });
+    }
+    applyFilters();
+  });
+
+  searchForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyFilters();
+  });
+
+  applyFilters();
+
+  // Scroll spy: keep the sidebar highlight in sync with the visible section.
+  const sectionLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
+  const sections = sectionLinks
+    .map((link) => {
+      const section = document.getElementById(link.dataset.section);
+      return section ? { link, section } : null;
+    })
+    .filter(Boolean);
+
+  if (sections.length) {
+    let activeSectionId = null;
+    let scrollTicking = false;
+
+  const setActiveSection = (sectionId) => {
+      if (!sectionId || sectionId === activeSectionId) return;
+      activeSectionId = sectionId;
+
+      sections.forEach(({ link }) => {
+        const isActive = link.dataset.section === sectionId;
+        link.classList.toggle('active', isActive);
+        if (isActive) {
+          link.setAttribute('aria-current', 'page');
+        } else {
+          link.removeAttribute('aria-current');
+        }
+      });
+    };
+
+  // Determine which section crosses the probe line (35% viewport height).
+  const computeActiveByScroll = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const probeLine = scrollY + viewportHeight * 0.35;
+
+      let candidate = sections[0];
+
+      sections.forEach((entry) => {
+        const rect = entry.section.getBoundingClientRect();
+        const top = rect.top + scrollY;
+        const bottom = rect.bottom + scrollY;
+
+        if (probeLine >= top && probeLine < bottom) {
+          candidate = entry;
+        } else if (probeLine >= bottom) {
+          candidate = entry;
+        }
+      });
+
+      setActiveSection(candidate.section.id);
+    };
+
+  // Throttle scroll events with requestAnimationFrame for perf.
+  const scheduleScrollUpdate = () => {
+      if (scrollTicking) return;
+      scrollTicking = true;
+      requestAnimationFrame(() => {
+        scrollTicking = false;
+        computeActiveByScroll();
+      });
+    };
+
+  // If the page loads with a hash, jump the highlight immediately.
+  const setFromHash = () => {
+      const hashId = window.location.hash.replace('#', '');
+      if (!hashId) return false;
+      const match = sections.find(({ section }) => section.id === hashId);
+      if (!match) return false;
+      setActiveSection(match.section.id);
+      return true;
+    };
+
+    sections.forEach(({ link, section }) => {
+      link.addEventListener('click', () => setActiveSection(section.id));
+    });
+
+    window.addEventListener('scroll', scheduleScrollUpdate, { passive: true });
+    window.addEventListener('resize', scheduleScrollUpdate);
+
+    if (!setFromHash()) {
+      computeActiveByScroll();
+    }
+  }
 });

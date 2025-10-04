@@ -9,198 +9,192 @@
     <title>GO! MARIKINA</title>
     <link rel="stylesheet" href="./assets/css/style.css">
 </head>
-<body>
+<body id="top">
+    <div class="dashboard-layout">
+        <?php include './includes/navbar.php'; ?>
 
-<div class="container">
-    <main id="main-content" class="main-content">
-        <div class="hero-section">
+        <main class="dashboard-main" id="main-content">
+            <!-- Search bar + quick actions -->
+            <header class="dashboard-header">
+                <form class="dashboard-search" role="search">
+                    <button type="submit" class="search-button" aria-label="Search reports">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                        </svg>
+                    </button>
+                    <input type="search" id="reportSearch" name="q" placeholder="Search for Reports, Date, Status" autocomplete="off" aria-label="Search for reports by text or status">
+                </form>
 
-            <div class="header-pattern-top">
-                <img src="./uploads/header.png" alt="Top Decorative Header Pattern">
-            </div>
-            
-            <div class="top-right-logo">
-                <img src="./uploads/marikina_logo.png" alt="Marikina Logo">
-            </div>
-            
-            <div class="content-container">
-                <div class="left-building">
-                    <img src="./uploads/l_building.png" alt="Left Building">
+                <div class="dashboard-actions">
+                    <button type="button" class="action-icon" aria-label="Open profile">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+                        </svg>
+                    </button>
+                    <button type="button" class="action-icon" aria-label="Notifications">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                            <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16z" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                    </button>
                 </div>
-                <div class="right-building">
-                    <img src="./uploads/r_build.png" alt="Right Building">
-                </div>
-                
-                <div class="hero-content">
+            </header>
 
-                    <div class="main-logo">
-                        <img class="ph-logo" src="./uploads/ph_logo.png" alt="Philippines Logo Background">
-                        <img class="go-logo" src="./uploads/go_marikina_logo.png" alt="GO! MARIKINA Logo">
-                    </div>
-                    
-                    <button class="create-report-btn" onclick="openCreateReport()">Create a Report</button>
+            <!-- Hero banner keeps branding artwork -->
+            <section class="dashboard-hero" id="hero" aria-label="Go Marikina banner">
+                <div class="hero-card">
+                    <img src="./uploads/go_marikina_logo.png" alt="GO! MARIKINA">
                 </div>
-            </div>
-        </div>
+            </section>
 
-            <!-- Reports Section -->
-            <div id="reports" class="reports-section">
+            <!-- Reports listing; search/filter logic is coordinated via assets/js/script.js -->
+            <section class="reports-section" id="reports">
                 <div class="reports-header">
-                    <button class="current-reports-btn">Current Reports</button>
-                    <h2 class="reports-date">
-                        <?php 
-                            // Set timezone to Philippines
-                            date_default_timezone_set('Asia/Manila');
-                            // Display current day and date in uppercase
-                            echo strtoupper(date('l, F j, Y'));
-                        ?>
-                    </h2>
-                    <div class="reports-filter-control">
-                        <button class="filter-btn" type="button" aria-haspopup="true" aria-expanded="false" data-default-label="Filter">Filter</button>
-                        <div class="filter-dropdown" role="menu" hidden>
-                            <p class="filter-dropdown-title">Show</p>
-                            <button type="button" class="filter-option active" role="menuitemradio" aria-checked="true" data-filter="all" data-label="All Reports">All Reports</button>
-                            <button type="button" class="filter-option" role="menuitemradio" aria-checked="false" data-filter="unresolved" data-label="Unresolved">Unresolved</button>
-                            <button type="button" class="filter-option" role="menuitemradio" aria-checked="false" data-filter="solved" data-label="Solved">Solved</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Reports Grid -->
-                <div class="reports-grid">
-                <div class="report-card">
-                    <img src="uploads/road-construction.png" alt="Road construction">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status unresolved">UNRESOLVED</div>
-                        </div>
-                        <div class="report-description">The road construction at Bulelak Street has been dragging on for weeks, causing daily inconvenience to residents and commuters alike. Traffic has become unbearable, with vehicles piling up during rush hours and people struggling to get in and out of the area. Small businesses along the street are also suffering because customers avoid passing through the congested road. Despite the long wait and the visible frustration of the community, there are still no clear updates on when the project will be completed, leaving everyone anxious and frustrated about how much longer they will have to endure the disruption.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
-                            </div>
-                            <button class="see-more-btn" onclick="openReportModal(1)">See More</button>
+                    <h2>Current Reports</h2>
+                    <div class="reports-filter">
+                        <button type="button" class="filter-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="reportFilterMenu">
+                            <span>Filter</span>
+                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                <path d="M4 5h16M7 12h10m-6 7h2" />
+                            </svg>
+                        </button>
+                        <div class="filter-menu" id="reportFilterMenu" role="menu" hidden>
+                            <button type="button" class="filter-option active" data-status="all" role="menuitemradio" aria-checked="true">All Reports</button>
+                            <button type="button" class="filter-option" data-status="unresolved" role="menuitemradio" aria-checked="false">Unresolved</button>
+                            <button type="button" class="filter-option" data-status="solved" role="menuitemradio" aria-checked="false">Solved</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="report-card">
-                    <img src="uploads/flooding.png" alt="Flooding">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status unresolved">UNRESOLVED</div>
-                        </div>
-                        <div class="report-description">Flooding along Sumulong has become a serious problem that affects not only the daily lives of residents but also the overall safety and economic activity in the area. Every time heavy rain pours, the streets quickly become submerged, making it nearly impossible for vehicles to pass through and forcing pedestrians to wade through dangerous, waist-deep waters. The constant flooding damages homes, weakens road infrastructure, and disrupts transportation, leaving commuters stranded and delaying essential services. Small businesses suffer significant losses because customers avoid flooded areas, deliveries are delayed, and property is repeatedly damaged. On top of that, the stagnant water poses health risks, becoming a breeding ground for mosquitoes and raising concerns about waterborne diseases.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
+                <div class="reports-list" data-empty-message="No reports match your filters yet.">
+                    <!-- Example unresolved report card -->
+                    <article class="report-card" data-status="unresolved" data-tags="community flooding">
+                        <header class="report-card-header">
+                            <div class="report-author">
+                                <div class="author-avatar" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <circle cx="12" cy="8" r="4" />
+                                        <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3>Flooding</h3>
+                                    <p>Miguel De Guzman</p>
+                                </div>
                             </div>
-                            <button class="see-more-btn" onclick="openReportModal(2)">See More</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="report-card">
-                    <img src="uploads/no-parking.png" alt="No parking">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status solved">Solved</div>
-                        </div>
-                        <div class="report-description">Grabe na ‘yung illegal parking dito sa area halos kalahati ng kalsada ay okupado na ng mga sasakyan na naka park kung saan-saan. Dahil dito, sobrang sikip na ng daan at hirap na hirap na ang mga dumadaan, lalo na kapag rush hour. Imbes na dalawang lane ang magagamit ng mga motorista, isa na lang talaga ang bukas dahil yung kabila, halos naging extension na ng parking lot. Ang masama pa, hindi lang mga private cars kundi pati ilang delivery trucks at jeepney drivers na naghihintay ng pasahero ang humaharang, kaya lalo pang nagkaka-abala.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
+                            <div class="report-header-actions">
+                                <button type="button" class="icon-button" aria-label="View location">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
+                                    </svg>
+                                </button>
+                                <button type="button" class="icon-button" aria-label="Share report">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                                        <path d="m7 9 5-6 5 6" />
+                                        <path d="M12 3v13" />
+                                    </svg>
+                                </button>
+                                <span class="chip chip-category">Community</span>
+                                <span class="chip chip-status unresolved">Unresolved</span>
                             </div>
-                            <button class="see-more-btn" onclick="openReportModal(3)">See More</button>
-                        </div>
-                    </div>
-                </div>
+                        </header>
+                        <p class="report-summary">The road construction at Bulelak Street has been dragging bla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla.</p>
+                        <figure class="report-media aspect-8-4">
+                            <img src="./uploads/flooding.png" alt="Flooding in Marikina">
+                        </figure>
+                    </article>
 
-                <div class="report-card">
-                    <img src="uploads/no-parking.png" alt="No parking">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status solved">Solved</div>
-                        </div>
-                        <div class="report-description">Grabe na ‘yung illegal parking dito sa area halos kalahati ng kalsada ay okupado na ng mga sasakyan na naka park kung saan-saan. Dahil dito, sobrang sikip na ng daan at hirap na hirap na ang mga dumadaan, lalo na kapag rush hour. Imbes na dalawang lane ang magagamit ng mga motorista, isa na lang talaga ang bukas dahil yung kabila, halos naging extension na ng parking lot. Ang masama pa, hindi lang mga private cars kundi pati ilang delivery trucks at jeepney drivers na naghihintay ng pasahero ang humaharang, kaya lalo pang nagkaka-abala.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
+                    <!-- Duplicate card used as placeholder data -->
+                    <article class="report-card" data-status="unresolved" data-tags="community infrastructure road">
+                        <header class="report-card-header">
+                            <div class="report-author">
+                                <div class="author-avatar" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <circle cx="12" cy="8" r="4" />
+                                        <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3>Road Construction</h3>
+                                    <p>Miguel De Guzman</p>
+                                </div>
                             </div>
-                            <button class="see-more-btn" onclick="openReportModal(3)">See More</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="report-card">
-                    <img src="uploads/flooding.png" alt="Flooding">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status unresolved">UNRESOLVED</div>
-                        </div>
-                        <div class="report-description">Flooding along Sumulong has become a serious problem that affects not only the daily lives of residents but also the overall safety and economic activity in the area. Every time heavy rain pours, the streets quickly become submerged, making it nearly impossible for vehicles to pass through and forcing pedestrians to wade through dangerous, waist-deep waters. The constant flooding damages homes, weakens road infrastructure, and disrupts transportation, leaving commuters stranded and delaying essential services. Small businesses suffer significant losses because customers avoid flooded areas, deliveries are delayed, and property is repeatedly damaged. On top of that, the stagnant water poses health risks, becoming a breeding ground for mosquitoes and raising concerns about waterborne diseases.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
+                            <div class="report-header-actions">
+                                <button type="button" class="icon-button" aria-label="View location">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
+                                    </svg>
+                                </button>
+                                <button type="button" class="icon-button" aria-label="Share report">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                                        <path d="m7 9 5-6 5 6" />
+                                        <path d="M12 3v13" />
+                                    </svg>
+                                </button>
+                                <span class="chip chip-category">Community</span>
+                                <span class="chip chip-status unresolved">Unresolved</span>
                             </div>
-                            <button class="see-more-btn" onclick="openReportModal(2)">See More</button>
-                        </div>
-                    </div>
-                </div>
+                        </header>
+                        <p class="report-summary">The road construction at Bulelak Street has been dragging bla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla.</p>
+                        <figure class="report-media aspect-8-4">
+                            <img src="./uploads/road-construction.png" alt="Road construction barriers">
+                        </figure>
+                    </article>
 
-                <div class="report-card">
-                    <img src="uploads/road-construction.png" alt="Road construction">
-                    <div class="report-info">
-                        <div class="report-header">
-                            <div class="report-category">COMMUNITY</div>
-                            <div class="report-status unresolved">UNRESOLVED</div>
-                        </div>
-                        <div class="report-description">The road construction at Bulelak Street has been dragging on for weeks, causing daily inconvenience to residents and commuters alike. Traffic has become unbearable, with vehicles piling up during rush hours and people struggling to get in and out of the area. Small businesses along the street are also suffering because customers avoid passing through the congested road. Despite the long wait and the visible frustration of the community, there are still no clear updates on when the project will be completed, leaving everyone anxious and frustrated about how much longer they will have to endure the disruption.</div>
-                        <div class="report-footer">
-                            <div class="report-meta">
-                                <span>5 mins ago, September 15</span>
-                                <span>Miguel De Guzman</span>
+                    <!-- Sample solved report -->
+                    <article class="report-card" data-status="solved" data-tags="community parking">
+                        <header class="report-card-header">
+                            <div class="report-author">
+                                <div class="author-avatar" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <circle cx="12" cy="8" r="4" />
+                                        <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3>Illegal Parking</h3>
+                                    <p>Miguel De Guzman</p>
+                                </div>
                             </div>
-                            <button class="see-more-btn" onclick="openReportModal(1)">See More</button>
-                        </div>
-                    </div>
-                    
-            </div>
-            </div>
-        </div>
-    </main>
-</div>
-
-<!-- Report Detail Modal -->
-<div id="reportModal" class="modal">
-    <div class="modal-content report-modal">
-        <span class="close" onclick="closeModal('reportModal')">&times;</span>
-        <div class="report-date">MONDAY, SEPTEMBER 15, 2025</div>
-        <div class="report-detail">
-            <img id="reportImage" src="/placeholder.svg" alt="Report image">
-            <div class="report-detail-info">
-                <div class="report-status-detail">STATUS: <span id="reportStatus"></span></div>
-                <div class="report-posted">POSTED BY: <span id="reportAuthor"></span></div>
-                <div class="report-description-detail">
-                    <strong>DESCRIPTION:</strong>
-                    <p id="reportDescription"></p>
+                            <div class="report-header-actions">
+                                <button type="button" class="icon-button" aria-label="View location">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
+                                    </svg>
+                                </button>
+                                <button type="button" class="icon-button" aria-label="Share report">
+                                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                                        <path d="m7 9 5-6 5 6" />
+                                        <path d="M12 3v13" />
+                                    </svg>
+                                </button>
+                                <span class="chip chip-category">Community</span>
+                                <span class="chip chip-status solved">Solved</span>
+                            </div>
+                        </header>
+                        <p class="report-summary">The road construction at Bulelak Street has been dragging bla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla.</p>
+                        <figure class="report-media aspect-8-4">
+                            <img src="./uploads/no-parking.png" alt="Illegal parking removal">
+                        </figure>
+                    </article>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
+
+    <!-- Floating action button stays pinned bottom-right -->
+    <button type="button" class="floating-action" aria-label="Create a new report">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <rect x="11" y="5" width="2" height="14" rx="1" />
+                <rect x="5" y="11" width="14" height="2" rx="1" />
+            </svg>
+        </button>
     </div>
-</div>
 
-<?php include './includes/navbar.php'; ?>
-<script src="./assets/js/script.js"></script>
+    <script src="./assets/js/script.js" defer></script>
 </body>
 </html>

@@ -3,11 +3,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchInput = document.querySelector('#reportSearch');
   const reportsList = document.querySelector('.reports-list');
   const reportCards = Array.from(document.querySelectorAll('.report-card'));
+  const reportsSection = document.getElementById('reports');
 
   const filterToggle = document.querySelector('.filter-toggle');
   const filterMenu = document.getElementById('reportFilterMenu');
   const filterOptions = filterMenu ? Array.from(filterMenu.querySelectorAll('.filter-option')) : [];
   const filterLabel = filterToggle?.querySelector('span');
+  const statusLabels = {
+    all: 'Filter',
+    unresolved: 'Unresolved',
+    in_progress: 'In progress',
+    solved: 'Solved',
+  };
 
   let activeStatus = 'all';
   let lastManualStatus = 'all';
@@ -53,6 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return 'unresolved';
     }
 
+    if (normalized.includes('in progress') || normalized.includes('in-progress') || contains('progress')) {
+      return 'in_progress';
+    }
+
     if (contains('solved') || contains('resolved')) {
       return 'solved';
     }
@@ -65,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!query) return '';
     return query
       .replace(/\b(solved|resolved|unsolved|unresolved|pending)\b/gi, ' ')
+      .replace(/\bin[-\s]?progress\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   };
@@ -80,7 +92,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (filterLabel) {
-      filterLabel.textContent = status === 'all' ? 'Filter' : `Filter: ${status.charAt(0).toUpperCase()}${status.slice(1)}`;
+  const labelText = statusLabels[status] || `${status.charAt(0).toUpperCase()}${status.slice(1).replace(/_/g, ' ')}`;
+      filterLabel.textContent = status === 'all' ? 'Filter' : `Filter: ${labelText}`;
       filterLabel.dataset.inferred = inferred ? 'true' : 'false';
     }
   };
@@ -174,9 +187,23 @@ document.addEventListener('DOMContentLoaded', () => {
     applyFilters();
   });
 
+  const scrollToReports = () => {
+    if (!reportsSection) return;
+    const { top } = reportsSection.getBoundingClientRect();
+    if (Math.abs(top) < 32) return;
+    searchInput?.blur?.();
+    window.requestAnimationFrame(() => {
+      reportsSection.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  };
+
   searchForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     applyFilters();
+    scrollToReports();
   });
 
   applyFilters();
@@ -925,6 +952,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.querySelector('.auth-form-login');
     
     if (profileContent && loginForm) {
+      const authCardWrapper = loginForm.closest('.auth-card');
+      const authSection = loginForm.closest('.auth-content');
+
       // Hide profile content initially
       profileContent.style.display = 'none';
       
@@ -942,6 +972,14 @@ document.addEventListener('DOMContentLoaded', () => {
           
           // Hide login form
           loginForm.style.display = 'none';
+
+          if (authCardWrapper) {
+            authCardWrapper.style.display = 'none';
+          }
+
+          if (authSection) {
+            authSection.style.display = 'none';
+          }
           
           // Show success message
           alert('Login successful! Welcome to your profile.');
@@ -967,6 +1005,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.querySelector('.auth-form-login');
     
     if (createReportContent && loginForm) {
+      const authCardWrapper = loginForm.closest('.auth-card');
+      const authSection = loginForm.closest('.auth-content');
+
       // Hide create report content initially
       createReportContent.style.display = 'none';
       
@@ -984,6 +1025,14 @@ document.addEventListener('DOMContentLoaded', () => {
           
           // Hide login form
           loginForm.style.display = 'none';
+
+          if (authCardWrapper) {
+            authCardWrapper.style.display = 'none';
+          }
+
+          if (authSection) {
+            authSection.style.display = 'none';
+          }
           
           // Show success message
           alert('Login successful! You can now create a report.');

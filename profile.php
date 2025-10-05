@@ -1,5 +1,5 @@
 <?php
-session_start();
+require __DIR__ . '/config/auth.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,64 +24,17 @@ session_start();
                     <img src="./uploads/go_marikina_logo.png" alt="GO! MARIKINA" class="header-logo-img">
                 </div>
                 <h1 class="profile-title">PROFILE</h1>
-                <div class="dashboard-actions">
-                    <a href="profile.php" class="action-icon" aria-label="Open profile">
-                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                            <circle cx="12" cy="8" r="4" />
-                            <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
-                        </svg>
-                    </a>
-                    <div class="notification" data-notification>
-                        <button type="button" class="action-icon notification-toggle" aria-label="Open notifications" aria-expanded="false" aria-haspopup="true" data-notification-toggle data-notification-target="dashboardNotifications">
-                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16z" />
-                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                            </svg>
-                            <span class="notification-dot" aria-hidden="true"></span>
-                        </button>
-                        <section class="notification-panel" id="dashboardNotifications" aria-labelledby="notificationPanelTitle" role="dialog" aria-modal="false" tabindex="-1" hidden data-notification-panel>
-                            <header class="notification-panel-header">
-                                <h3 id="notificationPanelTitle">Notifications</h3>
-                                <button type="button" class="notification-action" data-notification-mark-read>Mark all as read</button>
-                            </header>
-                            <div class="notification-list" role="list">
-                                <article class="notification-item" role="listitem">
-                                    <div class="notification-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                            <path d="M7.5 12.5 10.8 15.5 16.5 9" />
-                                        </svg>
-                                    </div>
-                                    <div class="notification-content">
-                                        <p class="notification-title">Profile updated successfully</p>
-                                        <p class="notification-meta">2 minutes ago</p>
-                                    </div>
-                                </article>
-                                <article class="notification-item" role="listitem">
-                                    <div class="notification-icon warning" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                            <path d="M12 9v4" />
-                                            <path d="M12 17h.01" />
-                                            <path d="M10.29 3.86 1.82 18a1 1 0 0 0 .86 1.5h18.64a1 1 0 0 0 .86-1.5L12.71 3.86a1 1 0 0 0-1.72 0z" />
-                                        </svg>
-                                    </div>
-                                    <div class="notification-content">
-                                        <p class="notification-title">New report submitted</p>
-                                        <p class="notification-meta">15 minutes ago</p>
-                                    </div>
-                                </article>
-                            </div>
-                            <footer class="notification-panel-footer">
-                                <a href="#" class="notification-footer-link">View all activity</a>
-                            </footer>
-                        </section>
-                    </div>
-                </div>
+                <div class="dashboard-actions" aria-hidden="true"></div>
             </header>
 
-            <?php include __DIR__ . '/includes/login.php'; ?>
+            <?php
+            $redirectTarget = 'profile.php';
+            include __DIR__ . '/includes/login_card.php';
+            ?>
 
-            <!-- Profile Content (Hidden until login) -->
-            <div id="profileContent" style="display: none;">
+            <?php if (is_logged_in()): ?>
+            <!-- Profile Content -->
+            <div id="profileContent">
                 <!-- Profile Information Section -->
                 <section class="profile-section">
                     <div class="profile-card">
@@ -198,6 +151,7 @@ session_start();
                     </div>
                 </section>
             </div>
+            <?php endif; ?>
         </main>
 
         <!-- Floating action button -->

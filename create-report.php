@@ -1,5 +1,5 @@
 <?php
-session_start();
+require __DIR__ . '/config/auth.php';
 ?>
 
 <!DOCTYPE html>
@@ -26,10 +26,14 @@ session_start();
                 <span class="auth-header-spacer" aria-hidden="true"></span>
             </header>
             
-            <?php include __DIR__ . '/includes/login.php'; ?>
+            <?php
+            $redirectTarget = 'create-report.php';
+            include __DIR__ . '/includes/login_card.php';
+            ?>
 
-            <!-- Create Report Content (Hidden until login) -->
-            <div id="createReportContent" style="display: none;">
+            <?php if (is_logged_in()): ?>
+            <!-- Create Report Content -->
+            <div id="createReportContent">
                 <div class="create-report-container">
 
                     <form class="create-report-form" id="createReportForm" enctype="multipart/form-data">
@@ -95,6 +99,7 @@ session_start();
                     </div>
                 </form>
             </div>
+            <?php endif; ?>
         </main>
     </div>
 

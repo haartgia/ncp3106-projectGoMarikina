@@ -1,6 +1,20 @@
 <?php
 require __DIR__ . '/config/auth.php';
+require __DIR__ . '/config/db.php';
+
+if (is_logged_in()) {
+    $user = current_user(); // get from session
+    $user_id = $user['id'];
+
+    // Fetch user info from database (optional — can skip if already in session)
+    $stmt = $conn->prepare("SELECT first_name, last_name, email, mobile FROM users WHERE id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,10 +46,9 @@ require __DIR__ . '/config/auth.php';
             include __DIR__ . '/includes/login_card.php';
             ?>
 
-            <?php if (is_logged_in()): ?>
+            <?php if (is_logged_in() && $user): ?>
             <!-- Profile Content -->
             <div id="profileContent">
-                <!-- Profile Information Section -->
                 <section class="profile-section">
                     <div class="profile-card">
                         <div class="profile-card-header">
@@ -45,18 +58,20 @@ require __DIR__ . '/config/auth.php';
                             <div class="profile-info">
                                 <div class="profile-field">
                                     <label class="profile-label">Name</label>
-                                    <input type="text" class="profile-input" value="Miguel De Guzman" readonly>
+                                    <input type="text" class="profile-input" 
+                                        value="<?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?>" readonly>
                                 </div>
-                                
+
                                 <div class="profile-field">
                                     <label class="profile-label">Email</label>
-                                    <input type="email" class="profile-input" value="miguelivan@gmail.com" readonly>
+                                    <input type="email" class="profile-input" 
+                                        value="<?php echo htmlspecialchars($user['email']); ?>" readonly>
                                 </div>
-                                
+
                                 <div class="profile-field">
                                     <label class="profile-label">Password</label>
                                     <div class="profile-input-group">
-                                        <input type="password" class="profile-input" value="M*************" readonly id="passwordField">
+                                        <input type="password" class="profile-input" value="*************" readonly id="passwordField">
                                         <button type="button" class="profile-edit-btn" id="editPasswordBtn" data-field="password">
                                             <svg viewBox="0 0 24 24">
                                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -65,11 +80,12 @@ require __DIR__ . '/config/auth.php';
                                         </button>
                                     </div>
                                 </div>
-                                
+
                                 <div class="profile-field">
                                     <label class="profile-label">Mobile Number</label>
                                     <div class="profile-input-group">
-                                        <input type="tel" class="profile-input" value="+63 9451234567" readonly id="mobileField">
+                                        <input type="tel" class="profile-input" 
+                                            value="<?php echo htmlspecialchars($user['mobile']); ?>" readonly id="mobileField">
                                         <button type="button" class="profile-edit-btn" id="editMobileBtn" data-field="mobile">
                                             <svg viewBox="0 0 24 24">
                                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -83,15 +99,12 @@ require __DIR__ . '/config/auth.php';
                     </div>
                 </section>
 
-                <!-- Reports Summary -->
                 <div class="reports-summary">
                     <h2>No. of Reports 7</h2>
                 </div>
 
-                <!-- Dividing Line -->
                 <div class="dividing-line"></div>
 
-                <!-- Reports Section -->
                 <section class="reports-section">
                     <div class="reports-header">
                         <h3>Your Reports</h3>
@@ -111,50 +124,13 @@ require __DIR__ . '/config/auth.php';
                     </div>
 
                     <div class="reports-list">
-                        <!-- Sample report card -->
-                        <article class="report-card" data-status="solved" data-tags="community flooding">
-                            <header class="report-card-header">
-                                <div class="report-author">
-                                    <div class="author-avatar" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                            <circle cx="12" cy="8" r="4" />
-                                            <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3>Flooding</h3>
-                                        <p>Miguel De Guzman</p>
-                                    </div>
-                                </div>
-                                <div class="report-header-actions">
-                                    <button type="button" class="icon-button" aria-label="View location">
-                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                            <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
-                                        </svg>
-                                    </button>
-                                    <button type="button" class="icon-button" aria-label="Share report">
-                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-                                            <path d="m7 9 5-6 5 6" />
-                                            <path d="M12 3v13" />
-                                        </svg>
-                                    </button>
-                                    <span class="chip chip-category">Community</span>
-                                    <span class="chip chip-status solved">Solved</span>
-                                </div>
-                            </header>
-                            <p class="report-summary">The road construction at Bulelak Street has been dragging bla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla bla libabla.</p>
-                            <figure class="report-media aspect-8-4">
-                                <img src="./uploads/flooding.png" alt="Flooding in Marikina">
-                            </figure>
-                        </article>
+                        <p>No reports yet.</p>
                     </div>
                 </section>
             </div>
             <?php endif; ?>
         </main>
 
-        <!-- Floating action button -->
         <button type="button" class="floating-action" aria-label="Create a new report" onclick="window.location.href='create-report.php'">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                 <rect x="11" y="5" width="2" height="14" rx="1" />

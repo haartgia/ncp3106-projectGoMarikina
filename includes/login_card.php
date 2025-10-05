@@ -43,7 +43,7 @@ unset($_SESSION['login_error']);
 				<button type="submit" class="auth-submit">Sign In</button>
 			</form>
 
-			<form class="auth-form auth-form-signup" action="#" method="post" novalidate hidden>
+			<form class="auth-form auth-form-signup" action="register.php" method="post" novalidate hidden>
 				<div class="auth-field-row">
 					<label class="auth-field" for="signupFirstName">
 						<span class="auth-field-label">First Name</span>

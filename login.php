@@ -18,7 +18,7 @@ if ($email === '' || $password === '') {
     exit;
 }
 
-// ✅ Admin login
+//  Admin login
 if ($email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
     $_SESSION['user'] = [
         'id' => 0,
@@ -31,7 +31,7 @@ if ($email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
     exit;
 }
 
-// ✅ Regular user login
+//  Regular user login
 $stmt = $conn->prepare("SELECT id, first_name, last_name, email, password, mobile FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);
 $stmt->execute();

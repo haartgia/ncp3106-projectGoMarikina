@@ -7,21 +7,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// Collect form data
 $first_name = trim($_POST['first_name'] ?? '');
 $last_name  = trim($_POST['last_name'] ?? '');
 $mobile     = trim($_POST['mobile'] ?? '');
 $email      = trim($_POST['email'] ?? '');
 $password   = trim($_POST['password'] ?? '');
 
-// Basic validation
+
 if ($email === '' || $password === '' || $first_name === '' || $last_name === '' || $mobile === '') {
     $_SESSION['login_error'] = 'Please fill in all required fields.';
     header('Location: profile.php');
     exit;
 }
 
-// Check if email already exists
 $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);
 $stmt->execute();
@@ -34,10 +32,8 @@ if ($stmt->num_rows > 0) {
 }
 $stmt->close();
 
-// Hash password before saving
 $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-// Insert new user 
 $stmt = $conn->prepare("
     INSERT INTO users (first_name, last_name, mobile, email, password) 
     VALUES (?, ?, ?, ?, ?)

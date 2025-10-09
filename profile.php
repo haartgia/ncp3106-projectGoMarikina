@@ -3,10 +3,9 @@ require __DIR__ . '/config/auth.php';
 require __DIR__ . '/config/db.php';
 
 if (is_logged_in()) {
-    $user = current_user(); // get from session
+    $user = current_user(); 
     $user_id = $user['id'];
 
-    // Fetch user info from database (optional — can skip if already in session)
     $stmt = $conn->prepare("SELECT first_name, last_name, email, mobile FROM users WHERE id = ?");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();

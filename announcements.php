@@ -231,7 +231,10 @@ if (!empty($announcements)) {
                             <h2 id="announcements-heading">Published announcements</h2>
                             <p class="admin-section-subtitle">Newest updates appear at the top of the list.</p>
                         </div>
-                        <span class="admin-count">Total: <?php echo count($announcements); ?></span>
+                        <div class="admin-section-actions">
+                            <button type="button" class="view-all-btn" onclick="event.preventDefault(); openAnnouncementsModal();">View all announcements</button>
+                            <span class="admin-count">Total: <?php echo count($announcements); ?></span>
+                        </div>
                     </div>
 
                     <?php if ($announcements): ?>
@@ -297,6 +300,36 @@ if (!empty($announcements)) {
                 </aside>
             </div>
         </main>
+    </div>
+    <!-- Announcements Modal -->
+    <div id="announcementsModal" class="modal" hidden>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>All Announcements</h2>
+                <button type="button" class="modal-close" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <?php if (!empty($announcements)): ?>
+                    <ul class="modal-announcements-list">
+                        <?php foreach ($announcements as $announcement): ?>
+                            <li class="modal-announcement-item">
+                                <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
+                                <p class="announcement-date"><?php echo date('M j, Y · h:i A', strtotime($announcement['created_at'])); ?></p>
+                                <?php if (!empty($announcement['image'])): ?>
+                                    <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" 
+                                         alt="" class="modal-announcement-image">
+                                <?php endif; ?>
+                                <div class="announcement-content">
+                                    <?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <p class="modal-empty">No announcements available.</p>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
     <script src="assets/js/script.js" defer></script>
 </body>

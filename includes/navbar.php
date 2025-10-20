@@ -19,8 +19,11 @@
   $reportsHref = $isHome ? '#reports' : 'index.php#reports';
 ?>
 
+<!-- Navigation background scrim -->
+<div class="nav-scrim" aria-hidden="true"></div>
+
 <aside id="primary-sidebar" class="sidebar" aria-label="Primary navigation">
-  <div class="sidebar-profile">
+  <div class="sidebar-profile" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" data-user-menu-toggle>
     <div class="sidebar-avatar" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="presentation" focusable="false">
         <circle cx="12" cy="8" r="4" />
@@ -31,6 +34,13 @@
       <span class="sidebar-greeting">User</span>
     </div>
   </div>
+
+  <?php if (is_logged_in()): ?>
+  <div class="sidebar-user-menu" data-user-menu hidden>
+    <a href="profile.php" class="sidebar-user-item">Profile</a>
+    <a href="logout.php" class="sidebar-user-item danger">Log out</a>
+  </div>
+  <?php endif; ?>
 
   <nav class="sidebar-nav">
     <?php if (is_admin()): ?>

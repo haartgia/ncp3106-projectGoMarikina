@@ -141,7 +141,7 @@ usort($reports, static function (array $a, array $b): int {
                                 <?php endif; ?>
                                 <p class="public-announcement-card__body"><?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?></p>
                                 <footer class="public-announcement-card__footer">
-                                    <a class="public-announcement-link" href="announcements.php">View all announcements</a>
+                                    <button type="button" class="public-announcement-link" onclick="openAnnouncementsModal()">View all announcements</button>
                                 </footer>
                             </article>
                         <?php endforeach; ?>
@@ -190,8 +190,36 @@ usort($reports, static function (array $a, array $b): int {
 
                                 $submittedDisplay = format_datetime_display($report['submitted_at'] ?? null);
                                 $imagePath = $report['image'] ?? null;
+                                $titleDisplay = htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8');
+                                $reporterDisplay = htmlspecialchars($report['reporter'] ?? 'Resident', ENT_QUOTES, 'UTF-8');
+                                $locationDisplay = !empty($report['location']) ? htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8') : '';
+                                $summaryDisplay = htmlspecialchars($report['summary'] ?? '', ENT_QUOTES, 'UTF-8');
+                                $categoryDisplay = htmlspecialchars($report['category'] ?? 'Report', ENT_QUOTES, 'UTF-8');
+                                $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
+                                $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
+                                $submittedAttr = htmlspecialchars($submittedDisplay, ENT_QUOTES, 'UTF-8');
+                                $imageAttr = $imagePath ? htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8') : '';
+                                $ariaLabel = htmlspecialchars('View report details for ' . ($report['title'] ?? 'Citizen report'), ENT_QUOTES, 'UTF-8');
                             ?>
-                            <article class="report-card" data-status="<?php echo htmlspecialchars($datasetStatus, ENT_QUOTES, 'UTF-8'); ?>"<?php if ($tagsAttribute !== ''): ?> data-tags="<?php echo $tagsAttribute; ?>"<?php endif; ?>>
+                            <article
+                                class="report-card"
+                                tabindex="0"
+                                role="button"
+                                aria-haspopup="dialog"
+                                aria-label="<?php echo $ariaLabel; ?>"
+                                data-report-modal-trigger
+                                data-status="<?php echo htmlspecialchars($datasetStatus, ENT_QUOTES, 'UTF-8'); ?>"
+                                data-title="<?php echo $titleDisplay; ?>"
+                                data-summary="<?php echo $summaryDisplay; ?>"
+                                data-reporter="<?php echo $reporterDisplay; ?>"
+                                data-category="<?php echo $categoryDisplay; ?>"
+                                data-status-label="<?php echo $statusLabelDisplay; ?>"
+                                data-status-modifier="<?php echo $statusModifierDisplay; ?>"
+                                data-submitted="<?php echo $submittedAttr; ?>"
+                                <?php if ($locationDisplay !== ''): ?>data-location="<?php echo $locationDisplay; ?>"<?php endif; ?>
+                                <?php if ($imageAttr !== ''): ?>data-image="<?php echo $imageAttr; ?>"<?php endif; ?>
+                                <?php if ($tagsAttribute !== ''): ?>data-tags="<?php echo $tagsAttribute; ?>"<?php endif; ?>
+                            >
                                 <header class="report-card-header">
                                     <div class="report-author">
                                         <div class="author-avatar" aria-hidden="true">
@@ -202,14 +230,14 @@ usort($reports, static function (array $a, array $b): int {
                                         </div>
                                         <div>
                                             <div class="report-title-row">
-                                                <h3><?php echo htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8'); ?></h3>
-                                                <span class="report-meta">Submitted <?php echo htmlspecialchars($submittedDisplay, ENT_QUOTES, 'UTF-8'); ?></span>
+                                                <h3><?php echo $titleDisplay; ?></h3>
+                                                <span class="report-meta">Submitted <?php echo $submittedAttr; ?></span>
                                             </div>
                                             <p>
-                                                <?php echo htmlspecialchars($report['reporter'] ?? 'Resident', ENT_QUOTES, 'UTF-8'); ?>
-                                                <?php if (!empty($report['location'])): ?>
+                                                <?php echo $reporterDisplay; ?>
+                                                <?php if ($locationDisplay !== ''): ?>
                                                     <span class="report-meta-separator" aria-hidden="true">•</span>
-                                                    <span class="report-location"><?php echo htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                                    <span class="report-location"><?php echo $locationDisplay; ?></span>
                                                 <?php endif; ?>
                                             </p>
                                         </div>
@@ -227,16 +255,27 @@ usort($reports, static function (array $a, array $b): int {
                                                 <path d="M12 3v13" />
                                             </svg>
                                         </button>
-                                        <span class="chip chip-category"><?php echo htmlspecialchars($report['category'] ?? 'Report', ENT_QUOTES, 'UTF-8'); ?></span>
-                                        <span class="chip chip-status <?php echo htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <span class="chip chip-category" data-report-modal-category-label><?php echo $categoryDisplay; ?></span>
+                                        <span class="chip chip-status <?php echo $statusModifierDisplay; ?>" data-report-modal-status-label><?php echo $statusLabelDisplay; ?></span>
                                     </div>
                                 </header>
-                                <?php if (!empty($report['summary'])): ?>
-                                    <p class="report-summary"><?php echo htmlspecialchars($report['summary'], ENT_QUOTES, 'UTF-8'); ?></p>
+                                <?php if ($summaryDisplay !== ''): ?>
+                                    <p class="report-summary"><?php echo $summaryDisplay; ?></p>
                                 <?php endif; ?>
-                                <?php if ($imagePath): ?>
+                                <?php if ($imageAttr !== ''): ?>
                                     <figure class="report-media aspect-8-4">
-                                        <img src="<?php echo htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars(($report['title'] ?? 'Report') . ' photo', ENT_QUOTES, 'UTF-8'); ?>">
+                                        <img src="<?php echo $imageAttr; ?>" alt="<?php echo htmlspecialchars(($report['title'] ?? 'Report') . ' photo', ENT_QUOTES, 'UTF-8'); ?>">
+                                    </figure>
+                                <?php else: ?>
+                                    <figure class="report-media report-media--placeholder" aria-hidden="true">
+                                        <div class="report-media--placeholder-icon">
+                                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                                <circle cx="8.5" cy="10.5" r="2" />
+                                                <path d="M21 15.5 16.5 11 6 19" />
+                                            </svg>
+                                        </div>
+                                        <span>No photo provided</span>
                                     </figure>
                                 <?php endif; ?>
                             </article>
@@ -250,6 +289,57 @@ usort($reports, static function (array $a, array $b): int {
             </section>
         </main>
 
+    <div class="report-modal" id="reportModal" hidden>
+        <div class="report-modal__backdrop" data-report-modal-close data-report-modal-backdrop></div>
+    <div class="report-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle" aria-describedby="reportModalSummary" tabindex="-1">
+            <button type="button" class="report-modal__close" data-report-modal-close aria-label="Close report details">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            </button>
+            <div class="report-modal__content">
+                <header class="report-modal__header">
+                    <div class="report-modal__header-info">
+                        <h3 id="reportModalTitle" data-report-modal-title>Citizen report</h3>
+                        <p class="report-modal__submitted">Submitted <span data-report-modal-submitted>—</span></p>
+                    </div>
+                    <div class="report-modal__badges">
+                        <span class="chip chip-category" data-report-modal-category>Category</span>
+                        <span class="chip chip-status" data-report-modal-status>Status</span>
+                    </div>
+                </header>
+                <dl class="report-modal__meta-grid">
+                    <div class="report-modal__meta-item">
+                        <dt>Reporter</dt>
+                        <dd data-report-modal-reporter>—</dd>
+                    </div>
+                    <div class="report-modal__meta-item" data-report-modal-meta="location">
+                        <dt>Location</dt>
+                        <dd data-report-modal-location>—</dd>
+                    </div>
+                </dl>
+                <div class="report-modal__summary">
+                    <h4>Summary</h4>
+                    <p id="reportModalSummary" data-report-modal-summary>—</p>
+                </div>
+                <div class="report-modal__media" data-report-modal-media>
+                    <img data-report-modal-image alt="" hidden>
+                    <div class="report-modal__media-placeholder" data-report-modal-placeholder>
+                        <div class="report-media--placeholder-icon">
+                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                <circle cx="8.5" cy="10.5" r="2" />
+                                <path d="M21 15.5 16.5 11 6 19" />
+                            </svg>
+                        </div>
+                        <span>No photo provided</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Floating action button stays pinned bottom-right -->
     <button type="button" class="floating-action" aria-label="Create a new report" onclick="window.location.href='create-report.php'">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -259,6 +349,44 @@ usort($reports, static function (array $a, array $b): int {
         </button>
     </div>
 
+    <!-- Announcements Modal -->
+    <div id="announcementsModal" class="modal" hidden>
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2>City Announcements</h2>
+                    <p class="modal-subtitle">Stay informed about advisories, closures, and safety reminders from city hall.</p>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close modal">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false" width="24" height="24">
+                        <path d="M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="m6 6 12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <?php if (!empty($announcements)): ?>
+                    <ul class="modal-announcements-list">
+                        <?php foreach ($announcements as $announcement): ?>
+                            <li class="modal-announcement-item">
+                                <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
+                                <p class="announcement-date"><?php echo date('M j, Y · h:i A', strtotime($announcement['created_at'])); ?></p>
+                                <?php if (!empty($announcement['image'])): ?>
+                                    <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" 
+                                         alt="" class="modal-announcement-image">
+                                <?php endif; ?>
+                                <div class="announcement-content">
+                                    <?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <p class="modal-empty">No announcements available.</p>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
     <script src="./assets/js/script.js" defer></script>
 </body>
 </html>

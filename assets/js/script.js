@@ -1,3 +1,48 @@
+// Modal functionality
+const modal = document.getElementById('announcementsModal');
+
+function openAnnouncementsModal(e) {
+    if (e) {
+        e.preventDefault(); // Prevent any default navigation
+    }
+    if (modal) {
+        document.body.classList.add('modal-open');
+        modal.hidden = false;
+        setTimeout(() => modal.setAttribute('open', ''), 10);
+        return false; // Prevent any default behavior
+    }
+}
+
+function closeAnnouncementsModal() {
+    if (modal) {
+        modal.removeAttribute('open');
+        document.body.classList.remove('modal-open');
+        // Wait for animation to complete before hiding
+        setTimeout(() => modal.hidden = true, 300);
+    }
+}
+
+// Close modal when clicking outside or on close button
+if (modal) {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeAnnouncementsModal();
+        }
+    });
+
+    const closeButton = modal.querySelector('.modal-close');
+    if (closeButton) {
+        closeButton.addEventListener('click', closeAnnouncementsModal);
+    }
+
+    // Close on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.hidden) {
+            closeAnnouncementsModal();
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const searchForm = document.querySelector('.dashboard-search');
   const searchInput = document.querySelector('#reportSearch');
@@ -208,6 +253,186 @@ document.addEventListener('DOMContentLoaded', () => {
 
   applyFilters();
 
+  // Report details modal interactions
+  const reportModal = document.getElementById('reportModal');
+  if (reportModal && reportCards.length) {
+    const modalDialog = reportModal.querySelector('.report-modal__dialog');
+    const modalCloseButtons = Array.from(reportModal.querySelectorAll('[data-report-modal-close]'));
+  const modalTitle = reportModal.querySelector('[data-report-modal-title]');
+  const modalSubmitted = reportModal.querySelector('[data-report-modal-submitted]');
+  const modalReporter = reportModal.querySelector('[data-report-modal-reporter]');
+  const modalLocation = reportModal.querySelector('[data-report-modal-location]');
+  const modalLocationItem = reportModal.querySelector('[data-report-modal-meta="location"]');
+  const modalCategory = reportModal.querySelector('[data-report-modal-category]');
+  const modalStatus = reportModal.querySelector('[data-report-modal-status]');
+  const modalSummary = reportModal.querySelector('[data-report-modal-summary]');
+  const modalMediaContainer = reportModal.querySelector('[data-report-modal-media]');
+  const modalImage = reportModal.querySelector('[data-report-modal-image]');
+  const modalPlaceholder = reportModal.querySelector('[data-report-modal-placeholder]');
+    const modalBackdrop = reportModal.querySelector('[data-report-modal-backdrop]');
+
+  let lastFocusedElement = null;
+  let modalCloseTimer = null;
+  const MODAL_ANIMATION_DURATION = 320;
+
+    const applyStatusChip = (statusElement, modifier, label) => {
+      if (!statusElement) return;
+      statusElement.textContent = label || 'Status';
+      statusElement.classList.remove('unresolved', 'in-progress', 'solved');
+      if (modifier) {
+        statusElement.classList.add(modifier);
+      }
+    };
+
+    const updateMedia = (imageUrl, titleText) => {
+      if (!modalImage || !modalPlaceholder || !modalMediaContainer) return;
+
+      const hasImage = Boolean(imageUrl);
+
+      modalMediaContainer.classList.toggle('has-image', hasImage);
+      modalMediaContainer.classList.toggle('no-image', !hasImage);
+
+      if (hasImage) {
+        modalImage.src = imageUrl;
+        modalImage.alt = `${titleText} photo`;
+        modalImage.hidden = false;
+        modalImage.removeAttribute('aria-hidden');
+        modalPlaceholder.hidden = true;
+        modalPlaceholder.setAttribute('aria-hidden', 'true');
+        modalPlaceholder.style.display = 'none';
+      } else {
+        modalImage.removeAttribute('src');
+        modalImage.alt = '';
+        modalImage.hidden = true;
+        modalImage.setAttribute('aria-hidden', 'true');
+        modalPlaceholder.hidden = false;
+        modalPlaceholder.removeAttribute('aria-hidden');
+        modalPlaceholder.style.removeProperty('display');
+      }
+    };
+
+    const openModal = (card) => {
+      if (!card) return;
+      if (modalCloseTimer) {
+        clearTimeout(modalCloseTimer);
+        modalCloseTimer = null;
+      }
+
+      lastFocusedElement = document.activeElement;
+      reportModal.removeAttribute('hidden');
+      document.body.classList.add('modal-open');
+      reportModal.classList.remove('is-open');
+
+      requestAnimationFrame(() => {
+        reportModal.classList.add('is-open');
+        requestAnimationFrame(() => {
+          modalDialog?.focus({ preventScroll: true });
+        });
+      });
+
+      const {
+        title,
+        summary,
+        reporter,
+        location,
+        category,
+        statusLabel,
+        statusModifier,
+        submitted,
+        image,
+      } = card.dataset;
+
+      if (modalTitle) {
+        modalTitle.textContent = title || 'Citizen report';
+      }
+      if (modalSubmitted) {
+        modalSubmitted.textContent = submitted || '—';
+      }
+      if (modalReporter) {
+        modalReporter.textContent = reporter || '—';
+      }
+      if (modalLocation) {
+        modalLocation.textContent = location || '—';
+      }
+      if (modalLocationItem) {
+        modalLocationItem.hidden = !location;
+      }
+      if (modalCategory) {
+        if (category) {
+          modalCategory.textContent = category;
+          modalCategory.hidden = false;
+        } else {
+          modalCategory.textContent = 'Report';
+          modalCategory.hidden = true;
+        }
+      }
+      if (modalStatus) {
+        applyStatusChip(modalStatus, statusModifier, statusLabel || 'Status');
+        modalStatus.hidden = !statusLabel;
+      }
+      if (modalSummary) {
+        modalSummary.textContent = summary || 'No summary provided.';
+      }
+      updateMedia(image, title || 'Report');
+    };
+
+    const closeModal = () => {
+      if (reportModal.hasAttribute('hidden')) {
+        return;
+      }
+
+      reportModal.classList.remove('is-open');
+
+      modalCloseTimer = window.setTimeout(() => {
+        reportModal.setAttribute('hidden', 'hidden');
+        document.body.classList.remove('modal-open');
+
+        if (modalImage) {
+          modalImage.removeAttribute('src');
+        }
+
+        if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+          lastFocusedElement.focus({ preventScroll: true });
+        }
+
+        modalCloseTimer = null;
+      }, MODAL_ANIMATION_DURATION);
+    };
+
+    modalCloseButtons.forEach((button) => {
+      button.addEventListener('click', () => closeModal());
+    });
+
+    modalBackdrop?.addEventListener('click', () => closeModal());
+
+    reportModal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModal();
+      }
+    });
+
+    reportCards.forEach((card) => {
+      const handleOpen = (event) => {
+        if (event.type === 'click' && event.target.closest('.icon-button')) {
+          return;
+        }
+        openModal(card);
+      };
+
+      card.addEventListener('click', handleOpen);
+      card.addEventListener('keydown', (event) => {
+        if (event.target.closest('.icon-button')) {
+          return;
+        }
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleOpen(event);
+        }
+      });
+    });
+  }
+
   // Scroll spy: keep the sidebar highlight in sync with the visible section.
   const sectionLinks = Array.from(document.querySelectorAll('.sidebar-link[data-section]'));
   const sections = sectionLinks
@@ -354,6 +579,38 @@ document.addEventListener('DOMContentLoaded', () => {
             setNavOpen(false);
           }
         });
+      });
+
+      // Mobile: toggle user dropdown when tapping the blue profile area
+      const userToggle = primarySidebar.querySelector('[data-user-menu-toggle]');
+      const userMenu = primarySidebar.querySelector('[data-user-menu]');
+      let userMenuOpen = false;
+
+      const setUserMenuOpen = (open) => {
+        // Show only when NOT mobile (desktop/tablet)
+        if (navMediaQuery.matches || !userMenu) return;
+        userMenuOpen = !!open;
+        userMenu.hidden = !userMenuOpen;
+        userToggle?.setAttribute?.('aria-expanded', userMenuOpen ? 'true' : 'false');
+      };
+
+      userToggle?.addEventListener('click', (e) => {
+        if (navMediaQuery.matches) return; // ignore on mobile
+        e.preventDefault();
+        e.stopPropagation();
+        setUserMenuOpen(!userMenuOpen);
+      });
+
+      // Close when clicking outside inside sidebar
+      primarySidebar.addEventListener('click', (e) => {
+        if (navMediaQuery.matches || !userMenuOpen) return;
+        if (userMenu && !userMenu.contains(e.target) && !userToggle.contains(e.target)) {
+          setUserMenuOpen(false);
+        }
+      });
+      // Close on Escape
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setUserMenuOpen(false);
       });
     }
   }

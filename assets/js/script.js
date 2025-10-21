@@ -43,6 +43,82 @@ if (modal) {
     });
 }
 
+// Global background data service: polls sensor data and shares history across pages
+(function(){
+  if (window.GoMKData) return; // singleton
+  const STORAGE_KEY = 'gomk.history.v1';
+  const SELECT_KEY = 'gomk.selectedBarangay';
+  const MAX_POINTS = 720; // same as dashboard
+  let currentBrgy = localStorage.getItem(SELECT_KEY) || '';
+  let pollInterval = null;
+  let roundRobinIndex = 0;
+  let trackedBarangays = (function(){
+    try { const s = JSON.parse(localStorage.getItem('gomk.trackedBarangays')||'[]'); return Array.isArray(s)?s:[]; } catch { return []; }
+  })();
+  const listeners = new Set();
+
+  const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } };
+  const saveStore = (o) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(o)); } catch { /* ignore */ } };
+  const norm = (s) => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+
+  function loadHistoryFor(b){
+    const s = loadStore(); const key = norm(b);
+    return s[key] || { water:[], air:[], temp:[], humid:[], times:[] };
+  }
+  function saveHistoryFor(b,h){
+    const s = loadStore(); const key = norm(b);
+    const trim = a => (a.length > MAX_POINTS ? a.slice(-MAX_POINTS) : a);
+    s[key] = { water:trim(h.water||[]), air:trim(h.air||[]), temp:trim(h.temp||[]), humid:trim(h.humid||[]), times:trim(h.times||[]) };
+    saveStore(s);
+  }
+
+  function computeWaterAlertLevel(v){ if (!Number.isFinite(v) || v <= 0) return { level: 0 }; if (v === 100) return { level: 1 }; if (v <= 33) return { level: 1 }; if (v <= 66) return { level: 2 }; return { level: 3 }; }
+
+  function dispatchUpdate(payload){
+    const ev = new CustomEvent('gomk:data', { detail: payload });
+    window.dispatchEvent(ev);
+    listeners.forEach(fn => { try { fn(payload); } catch {} });
+  }
+
+  async function poll(){
+    if (!currentBrgy) return;
+    try {
+      const r = await fetch(`api/get_sensor_data.php?barangay=${encodeURIComponent(currentBrgy)}`);
+      const data = await r.json();
+      if (data.error || (data.status !== 'online' && data.status !== 'degraded')) return;
+
+      const wl = computeWaterAlertLevel(Number(data.waterLevel)).level;
+      const aqi = Number(data.airQuality);
+      const t   = Number(data.temperature);
+      const h   = Number(data.humidity);
+      const ts  = data.timestamp || new Date().toISOString();
+
+      const hist = loadHistoryFor(currentBrgy);
+      const add = (arr, v) => { arr.push(Number.isFinite(v) ? v : null); if (arr.length > MAX_POINTS) arr.shift(); };
+      const addTime = (arr, v) => { arr.push(v); if (arr.length > MAX_POINTS) arr.shift(); };
+
+      add(hist.water, wl); add(hist.air, aqi); add(hist.temp, t); add(hist.humid, h); addTime(hist.times, ts);
+      saveHistoryFor(currentBrgy, hist);
+
+      dispatchUpdate({ barangay: currentBrgy, latest: { wl, aqi, t, h, ts }, history: hist });
+    } catch { /* ignore network errors */ }
+  }
+
+  function start(){
+    if (pollInterval) clearInterval(pollInterval);
+    poll();
+    pollInterval = setInterval(poll, 5000);
+  }
+
+  function setBarangay(b){ currentBrgy = b || ''; localStorage.setItem(SELECT_KEY, currentBrgy); start(); }
+  function on(fn){ if (typeof fn === 'function') listeners.add(fn); }
+  function off(fn){ listeners.delete(fn); }
+
+  window.GoMKData = { setBarangay, on, off, loadHistoryFor, MAX_POINTS, getBarangay: () => currentBrgy };
+  // Always start polling in the background
+  start();
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
   const searchForm = document.querySelector('.dashboard-search');
   const searchInput = document.querySelector('#reportSearch');
@@ -98,25 +174,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Detect keywords like "resolved" in the search box and map them to a status filter.
   const mapQueryToStatus = (query) => {
     if (!query) return null;
-    const normalized = query.toLowerCase();
-    const contains = (word) => new RegExp(`\\b${word}\\b`).test(normalized);
-
-    if (contains('unresolved') || contains('unsolved') || contains('pending')) {
-      return 'unresolved';
-    }
-
-    if (normalized.includes('in progress') || normalized.includes('in-progress') || contains('progress')) {
-      return 'in_progress';
-    }
-
-    if (contains('solved') || contains('resolved')) {
-      return 'solved';
-    }
-
+    const q = query.toLowerCase();
+    if (/\b(solved|resolved)\b/.test(q)) return 'solved';
+    if (/\b(unresolved|unsolved|pending)\b/.test(q)) return 'unresolved';
+    if (/\bin[-\s]?progress\b/.test(q)) return 'in_progress';
     return null;
   };
 
-  // Strip status keywords from the free-text portion so we don't double-filter.
+  // Remove status-related words so the remaining text can be used for free-text search.
   const removeStatusWords = (query) => {
     if (!query) return '';
     return query
@@ -127,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Sync the filter pill UI and aria state with the active status.
-  const updateFilterUI = (status, { inferred = false } = {}) => {
+  const updateFilterUI = (status, { inferred } = { inferred: false }) => {
     if (filterOptions.length) {
       filterOptions.forEach((option) => {
         const isActive = option.dataset.status === status;
@@ -137,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (filterLabel) {
-  const labelText = statusLabels[status] || `${status.charAt(0).toUpperCase()}${status.slice(1).replace(/_/g, ' ')}`;
+      const labelText = statusLabels[status] || `${status.charAt(0).toUpperCase()}${status.slice(1).replace(/_/g, ' ')}`;
       filterLabel.textContent = status === 'all' ? 'Filter' : `Filter: ${labelText}`;
       filterLabel.dataset.inferred = inferred ? 'true' : 'false';
     }

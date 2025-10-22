@@ -165,6 +165,27 @@ $barangays = [
         .graph-modal-item{ display:flex; justify-content:space-between; gap:12px; padding:6px 6px; border-bottom:1px dashed rgba(15,23,42,.08); font-size:13px; }
         .graph-modal-time{ color:#475569; }
         .graph-modal-value{ font-variant-numeric:tabular-nums; font-weight:600; }
+
+        /* Smooth section switching for barangay <-> river */
+        .city-switcher{ position:relative; }
+        .city-switcher > section{ transition: opacity .35s ease, transform .35s ease; }
+        .city-switcher > section.is-hidden{ opacity:0; transform: translateY(8px); pointer-events:none; position:absolute; inset:0; }
+        .city-switcher > section.is-active{ opacity:1; transform: translateY(0); }
+
+    /* Ensure hidden hero cards don't display */
+    .city-hero-card[hidden]{ display:none !important; }
+
+    /* Graph tooltip */
+    .graph-tooltip{ position:fixed; z-index:1001; pointer-events:none; display:none; padding:10px 12px; border-radius:10px; background:#fff; color:#0f172a; border:1px solid rgba(15,23,42,.08); box-shadow:0 10px 25px rgba(2,6,23,.15); font-size:12px; line-height:1.3; }
+    .graph-tooltip .ttl{ font-weight:700; }
+    .graph-tooltip .val{ font-variant-numeric:tabular-nums; }
+
+        /* Remove page scrolling on desktop (hide scrollbar) */
+        @media (min-width: 1024px){
+            html, body { overflow: hidden; }
+            body { -ms-overflow-style: none; scrollbar-width: none; }
+            body::-webkit-scrollbar{ width:0; height:0; }
+        }
     </style>
 </head>
 <body id="top">
@@ -180,13 +201,13 @@ $barangays = [
                 <div class="city-hero-text">
                     <p class="city-hero-kicker">City operations command</p>
                     <h1 class="city-hero-title">City Dashboard</h1>
-                    <p class="city-hero-subtitle">Monitor ambient conditions, keep barangay responders aligned, and surface telemetry trends from a single view.</p>
+                    <p class="city-hero-subtitle">Monitor ambient conditions for City Wide and Barangay, keep barangay responders aligned, and surface telemetry trends from a single view.</p>
                     <div class="city-hero-actions">
-                        <a class="city-hero-button city-hero-button--primary" href="#city-metrics">View live sensors</a>
-                        <a class="city-hero-button" href="index.php#reports">Review citizen reports</a>
+                        <a id="btnRiver" class="city-hero-button" href="#river-telemetry" data-mode="river" aria-label="View Marikina River telemetry" title="View Marikina River telemetry">City Wide</a>
+                        <a id="btnBarangay" class="city-hero-button city-hero-button--primary" href="#city-metrics" data-mode="barangay" aria-label="Go to barangay section" title="Go to barangay section" aria-current="page">Barangay</a>
                     </div>
                 </div>
-                <div class="city-hero-card">
+                <div class="city-hero-card" id="brgyHeroCard">
                     <p class="city-card-label">Barangay selection</p>
                     <label for="barangaySelect" class="city-select-label">Choose a barangay to focus the readings</label>
                     <div class="city-select-wrapper">
@@ -207,9 +228,30 @@ $barangays = [
                     <p class="city-selection-meta">Currently viewing: <strong id="selectedBarangay">None</strong></p>
                     <p class="city-selection-note">Sensor streams will populate once telemetry sources are connected.</p>
                 </div>
+                <!-- River station selection card (shown when Marikina mode is active) -->
+                <div class="city-hero-card" id="riverHeroCard" hidden>
+                    <p class="city-card-label">Station selection</p>
+                    <label for="stationSelect" class="city-select-label">Choose a Marikina River station</label>
+                    <div class="city-select-wrapper">
+                        <select id="stationSelect" class="city-select" aria-label="Choose a river station">
+                            <option value="" disabled selected>Choose a station...</option>
+                            <option>Montalban</option>
+                            <option>San Mateo-1</option>
+                            <option>Rodriguez</option>
+                            <option>Nangka</option>
+                            <option>Sto Nino</option>
+                            <option>Tumana Bridge</option>
+                            <option>Rosario Bridge</option>
+                        </select>
+                        <span class="city-select-arrow" aria-hidden="true">▾</span>
+                    </div>
+                    <p class="city-selection-meta">Currently viewing: <strong id="selectedStation">None</strong></p>
+                    <p class="city-selection-note">Levels update from PAGASA water level table.</p>
+                </div>
             </header>
 
-            <section class="admin-section city-section" id="city-metrics">
+            <div class="city-switcher" id="citySwitcher">
+            <section class="admin-section city-section is-active" id="city-metrics">
                 <div class="admin-section-header city-section-header">
                     <div>
                         <h2>Environment snapshot</h2>
@@ -290,6 +332,44 @@ $barangays = [
                     </article>
                 </div>
             </section>
+
+            <!-- River telemetry: hidden by default, toggled via buttons -->
+            <section class="admin-section city-section is-hidden" id="river-telemetry" aria-hidden="true">
+                <div class="admin-section-header city-section-header">
+                    <div>
+                        <h2>Marikina River levels</h2>
+                        <p class="admin-section-subtitle">Current, Alert, Alarm, and Critical levels per station.</p>
+                    </div>
+                    <span class="city-selected-pill">Selected station: <strong id="selectedStationChip">None</strong></span>
+                </div>
+
+                <div class="city-metric-grid">
+                    <article class="city-metric-card city-metric-card--water">
+                        <div class="city-metric-header">
+                            <p class="city-metric-title">Current level <span class="status-icon status-gray" title="Current level icon"><i class="bi bi-moisture" aria-hidden="true"></i></span></p>
+                            <p class="city-metric-value"><span id="riverCurrent" data-city-metric-value data-empty="true">—</span><span class="city-metric-unit">EL.m</span></p>
+                        </div>
+                        <p class="city-metric-description">Latest gauge reading at the selected station.</p>
+                        <div class="city-metric-footer">
+                            <div class="city-metric-sparkline"><canvas id="riverCurrentChart"></canvas></div>
+                            <time id="riverCurrentTime" class="city-metric-time" datetime="">—</time>
+                        </div>
+                    </article>
+
+                    <article class="city-metric-card city-metric-card--temperature">
+                        <div class="city-metric-header">
+                            <p class="city-metric-title">Air temperature <span class="status-icon status-gray" title="Temperature icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v7.17a4 4 0 1 1-4 0V4a2 2 0 0 1 2-2z"/></svg></span></p>
+                            <p class="city-metric-value"><span id="riverTempVal" data-city-metric-value data-empty="true">—</span><span class="city-metric-unit">°C</span></p>
+                        </div>
+                        <p class="city-metric-description">Nearest ambient temperature reading.</p>
+                        <div class="city-metric-footer">
+                            <div class="city-metric-sparkline"><canvas id="riverTempChart"></canvas></div>
+                            <time id="riverTempTime" class="city-metric-time" datetime="">—</time>
+                        </div>
+                    </article>
+                </div>
+            </section>
+            </div>
         </main>
     </div>
 
@@ -325,6 +405,7 @@ $barangays = [
             </div>
         </div>
     </div>
+    <div id="graphTooltip" class="graph-tooltip" role="status" aria-live="polite"></div>
 
     <script src="<?= $BASE ?>/assets/js/script.js?v=<?= time() ?>" defer></script>
     <script>
@@ -334,10 +415,17 @@ $barangays = [
       const BASE = '<?= $BASE ?>';
       const qs = id => document.getElementById(id);
 
-      const select = qs('barangaySelect');
-      const selectedBanner = qs('selectedBarangay');
-      const selectedChip = qs('selectedBarangayChip');
+    const select = qs('barangaySelect');
+    const selectedBanner = qs('selectedBarangay');
+    const selectedChip = qs('selectedBarangayChip');
+    const selectedStationBanner = qs('selectedStation');
+    const selectedStationChip = qs('selectedStationChip');
     const airBadge = qs('airQualityBadge');
+    // Toggle buttons and sections
+    const btnRiver = document.getElementById('btnRiver');
+    const btnBrgy = document.getElementById('btnBarangay');
+    const sectionRiver = document.getElementById('river-telemetry');
+    const sectionBrgy = document.getElementById('city-metrics');
                     const dots = {
                         air: qs('airStatusIcon'),
                         water: qs('waterStatusIcon'),
@@ -352,6 +440,9 @@ $barangays = [
         humid: qs('humidChart')
       };
 
+            // River time-series (shallow buffer so modal can render)
+            const riverHistory = { current: [], temp: [], times: [] };
+
       // Modal refs
       const modal = qs('graphModal');
       const modalClose = qs('graphModalClose');
@@ -359,15 +450,69 @@ $barangays = [
       const modalTitle = qs('graphModalTitle');
       const modalList = qs('graphModalList');
       const modalMeta = qs('graphModalMeta');
+    const tooltipEl = qs('graphTooltip');
     const granularitySelect = qs('graphGranularity');
 
     if (!select) return;
 
+    function setActiveMode(mode){
+        const isRiver = mode === 'river';
+        // Switch sections with a small rAF to trigger CSS transition reliably
+        [sectionRiver, sectionBrgy].forEach(sec => {
+            sec.classList.remove('is-active');
+            sec.classList.add('is-hidden');
+            sec.setAttribute('aria-hidden','true');
+        });
+        const show = isRiver ? sectionRiver : sectionBrgy;
+        show.classList.remove('is-hidden');
+        requestAnimationFrame(() => show.classList.add('is-active'));
+        show.removeAttribute('aria-hidden');
+
+        // Flip hero button styles and hero card visibility
+        if (isRiver){
+            btnRiver.classList.add('city-hero-button--primary');
+            btnRiver.setAttribute('aria-current','page');
+            btnBrgy.classList.remove('city-hero-button--primary');
+            btnBrgy.removeAttribute('aria-current');
+            document.getElementById('brgyHeroCard')?.setAttribute('hidden','');
+            document.getElementById('riverHeroCard')?.removeAttribute('hidden');
+        } else {
+            btnBrgy.classList.add('city-hero-button--primary');
+            btnBrgy.setAttribute('aria-current','page');
+            btnRiver.classList.remove('city-hero-button--primary');
+            btnRiver.removeAttribute('aria-current');
+            document.getElementById('brgyHeroCard')?.removeAttribute('hidden');
+            document.getElementById('riverHeroCard')?.setAttribute('hidden','');
+        }
+    }
+
+    function smoothScrollIntoView(target){
+        // Intentionally disabled: no automatic page scrolling on toggle
+        return;
+    }
+
+    // Wire buttons to toggle without page navigation
+    if (btnRiver) btnRiver.addEventListener('click', (e) => {
+        e.preventDefault();
+        setActiveMode('river');
+        smoothScrollIntoView(sectionRiver);
+        ensureRiverData();
+    });
+    if (btnBrgy) btnBrgy.addEventListener('click', (e) => {
+        e.preventDefault();
+        setActiveMode('barangay');
+        smoothScrollIntoView(sectionBrgy);
+    });
+
     let currentBrgy = '';
     const MAX_POINTS = (window.GoMKData?.MAX_POINTS) || 720;
     const SELECT_KEY = 'gomk.selectedBarangay';
+    // Bump cache key to avoid stale data from removed endpoints
+    const RIVER_CACHE_KEY = 'gomk.river.cache.v2';
+    const RIVER_SELECTED_KEY = 'gomk.river.station';
 
       const history = { water:[], air:[], temp:[], humid:[], times:[] };
+    let riverData = null; // { stations: [...] }
 
       // Helpers
       function computeWaterAlertLevel(v){
@@ -443,6 +588,103 @@ $barangays = [
         values.forEach((v,i)=>{ if(v===null) return; const x=i*stepX; const y=h-pad-((v-min)/(max-min||1))*(h-pad*2); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
         ctx.strokeStyle = grad; ctx.stroke();
       }
+
+            // ========== RIVER HELPERS ============
+                            function setStationSelection(name){
+                        const text = name || 'None';
+                        if (selectedStationBanner) selectedStationBanner.textContent = text;
+                        if (selectedStationChip) selectedStationChip.textContent = text;
+                    }
+
+                    function populateRiver(stationName){
+                if (!riverData || !Array.isArray(riverData.stations)) return;
+                const found = riverData.stations.find(s => s.name === stationName) || riverData.stations[0];
+                if (!found) return;
+                        setStationSelection(found.name);
+                            const setVal = (id, v) => { const el = qs(id); if(!el) return; el.textContent = (v==null? '—' : String(v)); el.dataset.empty = v==null ? 'true':'false'; };
+                                const setTimeSafe = (id, ts) => { const el = qs(id); if(!el) return; el.textContent = ts ? formatTime(ts) : '—'; if (ts) el.setAttribute('datetime', ts); else el.removeAttribute('datetime'); };
+                                setVal('riverCurrent', found.current);
+                                setTimeSafe('riverCurrentTime', found.time);
+
+                                // Temperature: reuse latest ambient temperature we already maintain
+                                const lastTemp = (() => { for (let i=history.temp.length-1;i>=0;i--){ const v = history.temp[i]; if (v!=null) return Number(v); } return null; })();
+                                setVal('riverTempVal', lastTemp != null ? Number(lastTemp).toFixed(1) : null);
+                                setTimeSafe('riverTempTime', history.times.at(-1) || null);
+
+                                // Draw small sparklines
+                                drawSpark(qs('riverCurrentChart'), riverHistory.current, '#16a34a');
+                                drawSpark(qs('riverTempChart'), history.temp, '#f59e0b');
+
+                            // Push into riverHistory so modal can render a small line
+                            const MAX_RIVER = 240;
+                            if (found.current != null){ riverHistory.current.push(Number(found.current)); if (riverHistory.current.length>MAX_RIVER) riverHistory.current.shift(); }
+                            riverHistory.temp.push(lastTemp != null ? Number(lastTemp) : null); if (riverHistory.temp.length>MAX_RIVER) riverHistory.temp.shift();
+                            const t = found.time || new Date().toISOString();
+                            riverHistory.times.push(t); if (riverHistory.times.length>MAX_RIVER) riverHistory.times.shift();
+            }
+
+            async function fetchRiver(){
+                        // Use the PAGASA scraper exclusively
+                        const res = await fetch(BASE + '/api/marikina_river.php', { cache: 'no-store' });
+                        if (!res.ok) throw new Error('river fetch failed');
+                        const json = await res.json();
+                        if (json && json.error){ throw new Error(json.error); }
+                        return json;
+            }
+
+            function ensureRiverData(){
+                try {
+                    const cached = localStorage.getItem(RIVER_CACHE_KEY);
+                    if (cached){
+                        const obj = JSON.parse(cached);
+                        riverData = obj; // trust immediate
+                    }
+                } catch {}
+                // If cache has no usable values, force a refresh
+                const cacheEmpty = !riverData || !Array.isArray(riverData.stations) || riverData.stations.every(s => s == null || s.current == null);
+                if (!riverData || cacheEmpty){
+                                fetchRiver().then(data => {
+                        riverData = data;
+                        try { localStorage.setItem(RIVER_CACHE_KEY, JSON.stringify(data)); } catch {}
+                                                const sel = document.getElementById('stationSelect');
+                                    // Populate station options dynamically if list present
+                                    if (sel && data?.stations?.length){
+                                        sel.innerHTML = '<option value="" disabled>Choose a station...</option>' + data.stations.map(s=>`<option>${s.name}</option>`).join('');
+                                    }
+                        const savedName = localStorage.getItem(RIVER_SELECTED_KEY) || (sel && sel.options[1]?.value);
+                        if (sel && savedName) sel.value = savedName;
+                        populateRiver(savedName);
+                                                // Bind change once
+                                                if (sel && !sel._bound){
+                                                    sel.addEventListener('change', () => {
+                                                        const name = sel.value;
+                                                        localStorage.setItem(RIVER_SELECTED_KEY, name);
+                                                        populateRiver(name);
+                                                    });
+                                                    sel._bound = true;
+                                                }
+                                }).catch(err => {
+                                    console.error('river fetch error', err);
+                                    setStationSelection('Unavailable');
+                                    const setVal = (id, v) => { const el = qs(id); if(!el) return; el.textContent = v; };
+                                    setVal('riverCurrent', '—');
+                                    setVal('riverTempVal', '—');
+                                });
+                } else {
+                    const sel = document.getElementById('stationSelect');
+                    const savedName = localStorage.getItem(RIVER_SELECTED_KEY) || (sel && sel.options[1]?.value);
+                    if (sel && savedName) sel.value = savedName;
+                                            populateRiver(savedName);
+                                            if (sel && !sel._bound){
+                                                sel.addEventListener('change', () => {
+                                                    const name = sel.value;
+                                                    localStorage.setItem(RIVER_SELECTED_KEY, name);
+                                                    populateRiver(name);
+                                                });
+                                                sel._bound = true;
+                                            }
+                }
+            }
             function drawFullChart(cv, values, times, color, unit, opts={}){
         if (!cv) return;
         const wrap = cv.parentElement, dpr = window.devicePixelRatio || 1;
@@ -511,9 +753,14 @@ $barangays = [
                             ctx.strokeStyle = color;
                             ctx.lineWidth = 2;
                             ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + innerW, y); ctx.stroke();
-                            // point marker
-                            ctx.fillStyle = color;
-                    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+                            // point marker: bigger with soft halo for visibility
+                            const toRGBA = (hex,a) => { const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex||''); if(!m) return `rgba(22,163,74,${a})`; const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; };
+                            const halo = toRGBA(color, 0.22);
+                            ctx.save();
+                            ctx.beginPath(); ctx.fillStyle = halo; ctx.arc(x, y, 11, 0, Math.PI*2); ctx.fill();
+                            ctx.beginPath(); ctx.fillStyle = color; ctx.arc(x, y, 6, 0, Math.PI*2); ctx.fill();
+                            ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI*2); ctx.stroke();
+                            ctx.restore();
                 } else {
                     // no data: show friendly placeholder text
                     ctx.fillStyle = 'rgba(71,85,105,.8)';
@@ -553,11 +800,12 @@ $barangays = [
                     function openGraph(kind){
                         // clean any previous resize handler to avoid stacking
                         if (modal._onResize) { window.removeEventListener('resize', modal._onResize); modal._onResize = null; }
-        const map = {
+                const map = {
           water:{ title:'Water level (Alert)', values: history.water, unit:'lvl', color:'#2563eb', domain:[0,3], ticks:3, yLabel:v=>'L'+Math.round(v) },
           air:{   title:'Air quality (AQI)',    values: history.air,   unit:'AQI', color:'#0ea5e9', domain:[0,200], ticks:4 },
           temp:{  title:'Temperature (°C)',     values: history.temp,  unit:'°C',  color:'#f59e0b', domain:[10,45], ticks:5 },
-          humid:{ title:'Humidity (%)',         values: history.humid, unit:'%',   color:'#10b981', domain:[0,100], ticks:5 }
+                    humid:{ title:'Humidity (%)',         values: history.humid, unit:'%',   color:'#10b981', domain:[0,100], ticks:5 },
+                    riverCurrent:{ title:'Marikina River Current (EL.m)', values: riverHistory.current, unit:'EL.m', color:'#16a34a', ticks:4 }
         };
         const cfg = map[kind]; if (!cfg) return;
 
@@ -578,14 +826,50 @@ $barangays = [
         }
                         modalMeta.textContent = `Points: ${vals.filter(x=>x!==null).length} (${step==='hour'?'hourly avg': step==='30min'?'30‑min avg':'per‑minute avg'})`;
 
-    modal.removeAttribute('hidden');
+        modal.removeAttribute('hidden');
     document.documentElement.classList.add('modal-open');
     document.body.classList.add('modal-open');
-                        const draw = () => drawFullChart(modalCanvas, vals, tms, cfg.color, cfg.unit, { domain: cfg.domain, ticks: cfg.ticks, yLabel: cfg.yLabel });
+                                const draw = () => drawFullChart(modalCanvas, vals, tms, cfg.color, cfg.unit, { domain: cfg.domain, ticks: cfg.ticks, yLabel: cfg.yLabel });
         draw();
         const onResize = () => draw();
         modal._onResize = onResize;
         window.addEventListener('resize', onResize);
+
+                // Tooltip: compute nearest index and show value/time
+                const pad = {top:16, right:16, bottom:80, left:56};
+                                function fmtShort(ts){ if(!ts) return '—'; const d = new Date((ts.includes('T')?ts:ts.replace(' ','T')) + '+08:00'); const mm = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); const time = d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'Asia/Manila'}); return `${mm}-${dd} ${time}`; }
+                function valText(v){ if(v==null || !isFinite(v)) return '—'; if (cfg.unit==='°C') return `${Number(v).toFixed(1)}°C`; if(cfg.unit==='%') return `${Number(v).toFixed(1)}%`; if(cfg.unit==='AQI') return `${Math.round(v)} AQI`; if(cfg.unit==='lvl') return `L${Math.round(v)}`; return String(v); }
+                                function showTooltip(x,y,idx){ if(!tooltipEl) return; const ts = tms[idx]; const v = vals[idx]; const title = fmtShort(ts); const label = (cfg.unit==='lvl' ? 'Level' : cfg.unit==='EL.m' ? 'Current [EL.m]' : 'Value'); const display = (cfg.unit==='EL.m' && isFinite(v)) ? `${Number(v).toFixed(2)} m` : valText(v); tooltipEl.innerHTML = `<div class="ttl">${title}</div><div class="val">${label}: ${display}</div>`; tooltipEl.style.display='block'; const off=12; const vpW = window.innerWidth, vpH = window.innerHeight; let tx = x+off, ty=y+off; const r = tooltipEl.getBoundingClientRect(); if(tx + r.width > vpW-8) tx = x - r.width - off; if(ty + r.height > vpH-8) ty = y - r.height - off; tooltipEl.style.left = `${Math.max(8, tx)}px`; tooltipEl.style.top = `${Math.max(8, ty)}px`; }
+                function hideTooltip(){ if(tooltipEl) tooltipEl.style.display='none'; }
+                                // Helper: add alpha to a hex color like #16a34a -> rgba(..., a)
+                                function hexToRgba(hex, a){ const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex||''); if(!m){ return `rgba(22,163,74,${a})`; } const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; }
+                                function onMove(ev){ const rect = modalCanvas.getBoundingClientRect(); const n = vals.length; if(n<=0){ hideTooltip(); return; } const x = ev.clientX - rect.left; const innerW = rect.width - pad.left - pad.right; const stepX = n>1 ? innerW/(n-1) : 0; const xi = n>1 ? Math.round((x - pad.left)/stepX) : 0; const idx = Math.max(0, Math.min(n-1, xi));
+                                    // redraw base chart
+                                    draw();
+                                    // draw a marker dot at nearest point
+                                    const dpr = window.devicePixelRatio || 1; const ctx = modalCanvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+                                    const wCSS = rect.width; const hCSS = rect.height; const innerH = hCSS - pad.top - pad.bottom;
+                                    const present = vals.filter(v=>v!==null && isFinite(v)); let minY, maxY; if (present.length>=1){ minY = Math.min(...present); maxY = Math.max(...present); } else { minY=0; maxY=1; }
+                                    if (cfg.domain){ if (cfg.domain[0]!=null) minY = cfg.domain[0]; if (cfg.domain[1]!=null) maxY = cfg.domain[1]; if (!cfg.domain[1] && minY===maxY) maxY = minY+1; }
+                                    const ySpan = Math.max(1e-6, maxY - minY);
+                                    const xv = pad.left + (n>1 ? idx*stepX : innerW/2);
+                                    const v = vals[idx]; const yv = (v==null||!isFinite(v)) ? (pad.top + innerH/2) : (hCSS - pad.bottom - ((v-minY)/ySpan)*innerH);
+                                    // Bigger, high-contrast marker with soft halo for visibility
+                                    const base = cfg.color || '#2563eb';
+                                    const halo = hexToRgba(base, 0.22);
+                                    ctx.save();
+                                    // Outer soft halo
+                                    ctx.beginPath(); ctx.fillStyle = halo; ctx.arc(xv, yv, 11, 0, Math.PI*2); ctx.fill();
+                                    // Inner solid dot
+                                    ctx.beginPath(); ctx.fillStyle = base; ctx.arc(xv, yv, 6, 0, Math.PI*2); ctx.fill();
+                                    // Thin white ring to pop on dark/light backgrounds
+                                    ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.arc(xv, yv, 6, 0, Math.PI*2); ctx.stroke();
+                                    ctx.restore();
+                                    showTooltip(ev.clientX, ev.clientY, idx);
+                                }
+                modalCanvas.addEventListener('mousemove', onMove);
+                modalCanvas.addEventListener('mouseleave', hideTooltip);
+                modal._tooltipHandlers = { onMove, hideTooltip };
       }
             function closeGraph(){
                 if (modal.hasAttribute('hidden')) return;
@@ -594,6 +878,12 @@ $barangays = [
                 document.body.classList.remove('modal-open');
                 if (modal._onResize) window.removeEventListener('resize', modal._onResize);
                 modal._onResize = null;
+                                if (modal._tooltipHandlers){
+                                    modalCanvas.removeEventListener('mousemove', modal._tooltipHandlers.onMove);
+                                    modalCanvas.removeEventListener('mouseleave', modal._tooltipHandlers.hideTooltip);
+                                    modal._tooltipHandlers = null;
+                                }
+                                if (tooltipEl) tooltipEl.style.display='none';
             }
       modalClose.addEventListener('click', closeGraph);
       modal.addEventListener('click', e => { if (e.target === modal) closeGraph(); });
@@ -611,6 +901,10 @@ $barangays = [
       canvases.air?.parentElement.addEventListener('click',   () => openGraph('air'));
       canvases.temp?.parentElement.addEventListener('click',  () => openGraph('temp'));
       canvases.humid?.parentElement.addEventListener('click', () => openGraph('humid'));
+    // Enable modal for Marikina current level chart
+    document.getElementById('riverCurrentChart')?.parentElement.addEventListener('click', () => openGraph('riverCurrent'));
+    // Enable modal for river temperature using the shared temperature history
+    document.getElementById('riverTempChart')?.parentElement.addEventListener('click', () => openGraph('temp'));
 
       // Persistence
     const loadHistoryFor = b => (window.GoMKData?.loadHistoryFor(b)) || { water:[], air:[], temp:[], humid:[], times:[] };

@@ -83,3 +83,40 @@ if (!function_exists('status_chip_modifier')) {
     }
 }
 
+if (!function_exists('user_initials')) {
+    /**
+     * Return initials from a user array or provided name components.
+     * Looks for common keys: first_name/last_name or name/full_name.
+     */
+    function user_initials(?array $user = null, ?string $fallback = 'User'): string
+    {
+        $first = '';
+        $last = '';
+        $display = '';
+
+        if (is_array($user)) {
+            $first = trim((string)($user['first_name'] ?? $user['firstName'] ?? ''));
+            $last  = trim((string)($user['last_name'] ?? $user['lastName'] ?? ''));
+            $display = trim((string)($user['name'] ?? $user['full_name'] ?? ''));
+        }
+
+        if ($first !== '' || $last !== '') {
+            $a = $first !== '' ? mb_substr($first, 0, 1, 'UTF-8') : '';
+            $b = $last !== '' ? mb_substr($last, 0, 1, 'UTF-8') : '';
+            return strtoupper($a . $b);
+        }
+
+        if ($display !== '') {
+            // Take first and last word initials
+            $parts = preg_split('/\s+/', $display);
+            if ($parts && count($parts) > 0) {
+                $firstCh = mb_substr($parts[0], 0, 1, 'UTF-8');
+                $lastCh = mb_substr($parts[count($parts)-1], 0, 1, 'UTF-8');
+                return strtoupper($firstCh . $lastCh);
+            }
+        }
+
+        return (string)$fallback;
+    }
+}
+

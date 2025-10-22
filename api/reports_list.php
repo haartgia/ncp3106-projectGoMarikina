@@ -1,0 +1,64 @@
+<?php
+// List reports (optionally filter by status, category, mine=true)
+// Response: JSON { success: bool, data: [...] }
+
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/db.php';
+
+header('Content-Type: application/json');
+
+$status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
+$category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+$mine = isset($_GET['mine']) ? (($_GET['mine'] === '1' || strtolower($_GET['mine']) === 'true') ? 1 : 0) : 0;
+
+$userId = null;
+if ($mine && is_logged_in()) {
+    $user = current_user();
+    $userId = $user['id'] ?? null;
+}
+
+$where = [];
+$params = [];
+$types = '';
+
+if ($status !== '') { $where[] = 'status = ?'; $params[] = $status; $types .= 's'; }
+if ($category !== '') { $where[] = 'category = ?'; $params[] = $category; $types .= 's'; }
+if ($mine && $userId) { $where[] = 'user_id = ?'; $params[] = $userId; $types .= 'i'; }
+
+$sql = 'SELECT id, user_id, title, category, description, location, image_path, status, created_at FROM reports';
+if (!empty($where)) {
+    $sql .= ' WHERE ' . implode(' AND ', $where);
+}
+$sql .= ' ORDER BY created_at DESC LIMIT 200';
+
+try {
+    $stmt = $conn->prepare($sql);
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    $rows = [];
+    while ($r = $res->fetch_assoc()) {
+        $rows[] = [
+            'id' => (int)$r['id'],
+            'title' => $r['title'],
+            'category' => $r['category'],
+            'status' => $r['status'],
+            'reporter' => 'Resident', // the UI currently shows a generic reporter; wire your users table if needed
+            'location' => $r['location'],
+            'submitted_at' => $r['created_at'],
+            'summary' => $r['description'],
+            'image' => $r['image_path'],
+            'tags' => [],
+        ];
+    }
+
+    echo json_encode(['success' => true, 'data' => $rows]);
+    exit;
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Server error listing reports']);
+    exit;
+}

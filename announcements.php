@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/config/auth.php';
+require __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_admin();
 
@@ -115,24 +116,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $image = $_FILES['announcement_image'] ?? null;
 
         if ($title !== '' && $body !== '') {
-            $nextId = empty($_SESSION['announcements'])
-                ? 1
-                : (max(array_column($_SESSION['announcements'], 'id')) + 1);
+            $nextId = time();
 
             $storedImagePath = null;
             if ($image && ($image['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
                 $storedImagePath = store_announcement_image($image, $nextId);
             }
 
-            $_SESSION['announcements'][] = [
-                'id' => $nextId,
-                'title' => $title,
-                'body' => $body,
-                'created_at' => date('c'),
-                'image' => $storedImagePath,
-            ];
-
-            $_SESSION['announcement_feedback'] = 'Announcement published successfully.';
+            // DB-first; fallback to session
+            try {
+                $check = $conn->query("SHOW TABLES LIKE 'announcements'");
+                if ($check && $check->num_rows > 0) {
+                    $stmt = $conn->prepare('INSERT INTO announcements (title, body, image_path, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())');
+                    $stmt->bind_param('sss', $title, $body, $storedImagePath);
+                    $stmt->execute();
+                    $stmt->close();
+                } else {
+                    $_SESSION['announcements'][] = [
+                        'id' => $nextId,
+                        'title' => $title,
+                        'body' => $body,
+                        'created_at' => date('c'),
+                        'image' => $storedImagePath,
+                    ];
+                }
+                $_SESSION['announcement_feedback'] = 'Announcement published successfully.';
+            } catch (Throwable $e) {
+                $_SESSION['announcement_feedback'] = 'Failed to publish announcement.';
+            }
         } else {
             $_SESSION['announcement_feedback'] = 'Please complete both the title and message fields before publishing.';
         }
@@ -140,26 +151,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $announcementId = (int) ($_POST['announcement_id'] ?? 0);
 
         if ($announcementId) {
-            if (!empty($_SESSION['announcements'])) {
-                foreach ($_SESSION['announcements'] as $existing) {
-                    if ((int) ($existing['id'] ?? 0) === $announcementId) {
-                        if (!empty($existing['image'])) {
-                            $imagePath = __DIR__ . '/' . $existing['image'];
-                            if (is_file($imagePath)) {
-                                @unlink($imagePath);
+            try {
+                $check = $conn->query("SHOW TABLES LIKE 'announcements'");
+                if ($check && $check->num_rows > 0) {
+                    $stmt0 = $conn->prepare('SELECT image_path FROM announcements WHERE id = ?');
+                    $stmt0->bind_param('i', $announcementId);
+                    $stmt0->execute();
+                    $res0 = $stmt0->get_result();
+                    $row0 = $res0->fetch_assoc();
+                    $stmt0->close();
+                    if ($row0 && !empty($row0['image_path'])) {
+                        $imagePath = __DIR__ . '/' . $row0['image_path'];
+                        if (is_file($imagePath)) { @unlink($imagePath); }
+                    }
+
+                    $stmt = $conn->prepare('DELETE FROM announcements WHERE id = ?');
+                    $stmt->bind_param('i', $announcementId);
+                    $stmt->execute();
+                    $stmt->close();
+                } else {
+                    if (!empty($_SESSION['announcements'])) {
+                        foreach ($_SESSION['announcements'] as $existing) {
+                            if ((int) ($existing['id'] ?? 0) === $announcementId) {
+                                if (!empty($existing['image'])) {
+                                    $imagePath = __DIR__ . '/' . $existing['image'];
+                                    if (is_file($imagePath)) { @unlink($imagePath); }
+                                }
+                                break;
                             }
                         }
-                        break;
                     }
+                    $_SESSION['announcements'] = array_values(array_filter(
+                        $_SESSION['announcements'] ?? [],
+                        static fn($announcement) => (int) ($announcement['id'] ?? 0) !== $announcementId
+                    ));
                 }
+                $_SESSION['announcement_feedback'] = 'Announcement removed.';
+            } catch (Throwable $e) {
+                $_SESSION['announcement_feedback'] = 'Failed to remove announcement.';
             }
-
-            $_SESSION['announcements'] = array_values(array_filter(
-                $_SESSION['announcements'] ?? [],
-                static fn($announcement) => (int) ($announcement['id'] ?? 0) !== $announcementId
-            ));
-
-            $_SESSION['announcement_feedback'] = 'Announcement removed.';
         }
     }
 
@@ -167,7 +197,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-$announcements = $_SESSION['announcements'] ?? [];
+$announcements = [];
+try {
+    $check = $conn->query("SHOW TABLES LIKE 'announcements'");
+    if ($check && $check->num_rows > 0) {
+        $res = $conn->query('SELECT id, title, body, image_path, created_at FROM announcements ORDER BY created_at DESC');
+        while ($a = $res->fetch_assoc()) {
+            $announcements[] = [
+                'id' => (int)($a['id'] ?? 0),
+                'title' => $a['title'] ?? '',
+                'body' => $a['body'] ?? '',
+                'image' => $a['image_path'] ?? null,
+                'created_at' => $a['created_at'] ?? null,
+            ];
+        }
+    } else {
+        $announcements = $_SESSION['announcements'] ?? [];
+    }
+} catch (Throwable $e) {
+    $announcements = $_SESSION['announcements'] ?? [];
+}
 $announcementFeedback = $_SESSION['announcement_feedback'] ?? null;
 unset($_SESSION['announcement_feedback']);
 
@@ -254,7 +303,7 @@ if (!empty($announcements)) {
                                         <?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
                                     </div>
                                     <footer class="announcement-card__footer">
-                                        <form method="post" class="announcement-delete-form" onsubmit="return confirm('Remove this announcement?');">
+                                        <form method="post" class="announcement-delete-form" data-confirm-message="Remove this announcement?">
                                             <input type="hidden" name="action" value="delete_announcement">
                                             <input type="hidden" name="announcement_id" value="<?php echo (int) $announcement['id']; ?>">
                                             <button type="submit" class="announcement-delete">Delete</button>

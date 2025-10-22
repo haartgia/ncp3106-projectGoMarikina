@@ -486,6 +486,8 @@ $barangays = [
         }
     }
 
+    // City-wide aggregation removed: City Wide uses river cards (2 cards). Barangay mode keeps 4 cards.
+
     function smoothScrollIntoView(target){
         // Intentionally disabled: no automatic page scrolling on toggle
         return;
@@ -496,7 +498,7 @@ $barangays = [
         e.preventDefault();
         setActiveMode('river');
         smoothScrollIntoView(sectionRiver);
-        ensureRiverData();
+    ensureRiverData();
     });
     if (btnBrgy) btnBrgy.addEventListener('click', (e) => {
         e.preventDefault();
@@ -624,12 +626,8 @@ $barangays = [
             }
 
             async function fetchRiver(){
-                        // Use the PAGASA scraper exclusively
-                        const res = await fetch(BASE + '/api/marikina_river.php', { cache: 'no-store' });
-                        if (!res.ok) throw new Error('river fetch failed');
-                        const json = await res.json();
-                        if (json && json.error){ throw new Error(json.error); }
-                        return json;
+                        // City-wide river API has been removed. Intentionally reject to trigger UI fallback.
+                        throw new Error('river api disabled');
             }
 
             function ensureRiverData(){
@@ -925,10 +923,18 @@ $barangays = [
     if (h !=null) { qs('humidityVal').textContent = Number(h).toFixed(1); updateHumidDot(h); }
         setTime('waterTime', ts); setTime('airTime', ts); setTime('tempTime', ts); setTime('humidTime', ts);
 
-        drawSpark(canvases.water, history.water, '#2563eb');
-        drawSpark(canvases.air,   history.air,   '#0ea5e9');
-        drawSpark(canvases.temp,  history.temp,  '#f59e0b');
-        drawSpark(canvases.humid, history.humid, '#10b981');
+                // For compact card sparklines, show 30‑minute averaged values to avoid cramped visuals
+                const pickSpark = (vals) => {
+                    try {
+                        const agg = aggregateBy(vals, history.times, '30min');
+                        return (agg.values && agg.values.length >= 2) ? agg.values : vals;
+                    } catch { return vals; }
+                };
+
+                drawSpark(canvases.water, pickSpark(history.water), '#2563eb');
+                drawSpark(canvases.air,   pickSpark(history.air),   '#0ea5e9');
+                drawSpark(canvases.temp,  pickSpark(history.temp),  '#f59e0b');
+                drawSpark(canvases.humid, pickSpark(history.humid), '#10b981');
       }
 
       function updateSelection(label){

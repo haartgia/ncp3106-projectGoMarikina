@@ -43,6 +43,94 @@ if (modal) {
     });
 }
 
+/* --- Stylized toasts and confirm dialog (global helpers) --- */
+(function initGlobalUIHelpers(){
+  // Toast container
+  let toastContainer = document.querySelector('.gomk-toast-container');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'gomk-toast-container';
+    document.body.appendChild(toastContainer);
+  }
+
+  // Confirm overlay
+  let confirmOverlay = document.querySelector('.gomk-confirm-overlay');
+  if (!confirmOverlay) {
+    confirmOverlay = document.createElement('div');
+    confirmOverlay.className = 'gomk-confirm-overlay';
+    confirmOverlay.innerHTML = `
+      <div class="gomk-confirm" role="dialog" aria-modal="true">
+        <div class="confirm-body"><p class="confirm-message"></p></div>
+        <div class="confirm-actions">
+          <button class="btn ghost cancel-btn">Cancel</button>
+          <button class="btn danger ok-btn">Delete</button>
+        </div>
+      </div>`;
+    document.body.appendChild(confirmOverlay);
+  }
+
+  const showToast = (text, { type = 'info', duration = 3500 } = {}) => {
+    const t = document.createElement('div');
+    t.className = 'gomk-toast';
+    if (type === 'success') t.style.background = 'linear-gradient(180deg,#0b5b27,#0d7a3a)';
+    if (type === 'error') t.style.background = 'linear-gradient(180deg,#5b0b0b,#7a0d0d)';
+    t.innerHTML = `<div class="toast-icon">${type === 'error' ? '!' : (type === 'success' ? '✓' : 'i')}</div><div class="toast-text">${text}</div>`;
+    toastContainer.appendChild(t);
+    // show
+    requestAnimationFrame(() => t.classList.add('show'));
+    const id = setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(() => t.remove(), 260);
+    }, duration);
+    return { dismiss: () => { clearTimeout(id); t.classList.remove('show'); setTimeout(() => t.remove(), 200); } };
+  };
+
+  const confirmDialog = (message, { okText = 'Delete', cancelText = 'Cancel' } = {}) => {
+    return new Promise((resolve) => {
+      confirmOverlay.querySelector('.confirm-message').textContent = message;
+      confirmOverlay.querySelector('.ok-btn').textContent = okText;
+      confirmOverlay.querySelector('.cancel-btn').textContent = cancelText;
+      confirmOverlay.classList.add('open');
+
+      const cleanup = () => {
+        confirmOverlay.classList.remove('open');
+        confirmOverlay.querySelector('.ok-btn').removeEventListener('click', onOk);
+        confirmOverlay.querySelector('.cancel-btn').removeEventListener('click', onCancel);
+      };
+
+      const onOk = () => { cleanup(); resolve(true); };
+      const onCancel = () => { cleanup(); resolve(false); };
+
+      confirmOverlay.querySelector('.ok-btn').addEventListener('click', onOk);
+      confirmOverlay.querySelector('.cancel-btn').addEventListener('click', onCancel);
+    });
+  };
+
+  // Expose globally
+  window.GOMK = window.GOMK || {};
+  window.GOMK.showToast = showToast;
+  window.GOMK.confirmDialog = confirmDialog;
+})();
+
+// Intercept forms that have data-confirm-message and show stylized confirm dialog
+document.addEventListener('submit', async (e) => {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  const msg = form.dataset.confirmMessage;
+  if (!msg) return;
+  e.preventDefault();
+  let ok = true;
+  if (window.GOMK && window.GOMK.confirmDialog) {
+    ok = await window.GOMK.confirmDialog(msg, { okText: 'Yes', cancelText: 'Cancel' });
+  } else {
+    ok = window.confirm(msg);
+  }
+  if (ok) form.submit();
+});
+
+// Add bottom 'View all activity' bar
+// (Removed bottom activity bar per user request)
+
 // Global background data service: polls sensor data and shares history across pages
 (function(){
   if (window.GoMKData) return; // singleton
@@ -318,6 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   applyFilters();
 
+
   // Report details modal interactions
   const reportModal = document.getElementById('reportModal');
   if (reportModal && reportCards.length) {
@@ -482,6 +571,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.type === 'click' && event.target.closest('.icon-button')) {
           return;
         }
+        // If the click was on a See more/less link, don't open modal
+        if (event.type === 'click' && (event.target.closest('.report-see-more') || event.target.closest('.report-see-less'))) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         openModal(card);
       };
 
@@ -495,6 +590,56 @@ document.addEventListener('DOMContentLoaded', () => {
           handleOpen(event);
         }
       });
+
+      // See more/less behavior: expand/collapse the summary inline (no modal)
+      const decodeEntities = (s) => {
+        const el = document.createElement('div');
+        el.innerHTML = s || '';
+        return el.textContent || '';
+      };
+
+      const initInlineToggle = (p) => {
+        if (!p) return;
+        // Cache the collapsed text if not yet cached
+        if (!p.dataset.collapsedText) {
+          // Remove any trailing "See more/less" label from the current text
+          const txt = (p.textContent || '').replace(/\s*(See more|See less)\s*$/i, '').trim();
+          p.dataset.collapsedText = txt;
+        }
+
+        const fullText = decodeEntities(card.dataset.summary || '');
+
+        const setExpanded = (expand) => {
+          p.dataset.expanded = expand ? 'true' : 'false';
+          // Reset text to either collapsed or full
+          p.textContent = expand ? fullText : (p.dataset.collapsedText || '');
+
+          // Append the appropriate action link
+          const link = document.createElement('a');
+          link.href = '#';
+          link.className = expand ? 'report-see-less' : 'report-see-more';
+          link.textContent = expand ? ' See less' : ' See more';
+          link.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            setExpanded(!expand);
+          });
+          p.appendChild(link);
+        };
+
+        // Initialize based on current presence of see-more link
+        const hasSeeMore = !!p.querySelector('.report-see-more');
+        if (hasSeeMore) {
+          setExpanded(false);
+        } else {
+          // If card was rendered without truncation, do nothing.
+        }
+      };
+
+      const summaryP = card.querySelector('.report-summary');
+      if (summaryP) {
+        initInlineToggle(summaryP);
+      }
     });
   }
 
@@ -688,8 +833,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const notificationPanel = notificationContainer.querySelector('[data-notification-panel]');
     const notificationDot = notificationContainer.querySelector('.notification-dot');
     const markReadButton = notificationContainer.querySelector('[data-notification-mark-read]');
+    const notificationList = notificationContainer.querySelector('.notification-list');
 
-    let notificationsOpen = false;
+  let notificationsOpen = false;
+  let notificationsLoaded = false; // set to true only after a successful load
+
+    // Toggle the "All caught up" state on the mark-read button
+    const setCaughtUp = (caught) => {
+      if (!markReadButton) return;
+      if (caught) {
+        markReadButton.textContent = 'All caught up';
+        markReadButton.setAttribute('aria-disabled', 'true');
+        markReadButton.classList.add('is-disabled');
+      } else {
+        markReadButton.textContent = 'Mark all as read';
+        markReadButton.removeAttribute('aria-disabled');
+        markReadButton.classList.remove('is-disabled');
+      }
+    };
 
     const setNotificationOpen = (open) => {
       if (!notificationToggle || !notificationPanel) return;
@@ -699,10 +860,33 @@ document.addEventListener('DOMContentLoaded', () => {
       notificationPanel.hidden = !notificationsOpen;
       if (notificationsOpen) {
         notificationPanel?.focus?.({ preventScroll: true });
+        if (!notificationsLoaded) loadNotifications();
       }
     };
 
     setNotificationOpen(false);
+
+    // Preload unread count on page load so the dot is accurate after refresh
+    (async function preloadUnread() {
+      try {
+        const r = await fetch('api/notifications_list.php?limit=1', { credentials: 'same-origin' });
+        if (!r.ok) { if (notificationDot) notificationDot.setAttribute('hidden', 'hidden'); return; }
+        const data = await r.json().catch(() => ({}));
+        if (notificationDot) {
+          if (data && data.success === true && (data.unreadCount || 0) > 0) {
+            notificationDot.removeAttribute('hidden');
+          } else {
+            notificationDot.setAttribute('hidden', 'hidden');
+          }
+        }
+        // Reflect caught-up state based on preload result
+        if (typeof setCaughtUp === 'function') {
+          setCaughtUp(!data || (data.unreadCount || 0) === 0);
+        }
+      } catch {
+        if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+      }
+    })();
 
     notificationToggle?.addEventListener('click', (event) => {
       event.preventDefault();
@@ -724,14 +908,199 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     markReadButton?.addEventListener('click', () => {
-      markReadButton.textContent = 'All caught up';
-      markReadButton.setAttribute('aria-disabled', 'true');
-      markReadButton.classList.add('is-disabled');
+      setCaughtUp(true);
       if (notificationDot && !notificationDot.hasAttribute('hidden')) {
         notificationDot.setAttribute('hidden', 'hidden');
       }
+      // Persist read state if backend endpoint exists
+      fetch('api/notifications_mark_read.php', { method: 'POST' }).catch(() => {});
     });
+
+    // Fetch and render notifications for the signed-in user
+    async function loadNotifications() {
+      // show a tiny loading state
+      if (notificationList) {
+        notificationList.innerHTML = '<div class="notification-empty" role="status">Loading…</div>';
+      }
+      try {
+        const r = await fetch('api/notifications_list.php?limit=20', { credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+
+        // Not authenticated: show friendly message and allow retry later
+        if (!r.ok && r.status === 401) {
+          notificationsLoaded = false; // allow retry after login
+          if (notificationList) {
+            notificationList.innerHTML = '<div class="notification-empty">Sign in to see your notifications.</div>';
+          }
+          if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+          return;
+        }
+
+        if (!data || data.success !== true) {
+          notificationsLoaded = false; // allow retry if server returned an error
+          if (notificationList) {
+            notificationList.innerHTML = '<div class="notification-empty">Unable to load notifications right now.</div>';
+          }
+          if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+          return;
+        }
+
+        if (Array.isArray(data.data) && notificationList) {
+          notificationList.innerHTML = '';
+          data.data.forEach((item) => {
+            const li = document.createElement('article');
+            li.className = 'notification-item';
+            li.setAttribute('role', 'listitem');
+            // mark unread visually
+            if (item.is_read === 0 || item.is_read === false) {
+              li.classList.add('is-unread');
+            }
+            const iconClass = item.type === 'warning' ? 'warning' : (item.type === 'success' ? 'success' : item.type === 'error' ? 'error' : '');
+            li.innerHTML = `
+              <div class="notification-icon ${iconClass}" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8h.01" />
+                  <path d="M12 12v4" />
+                </svg>
+              </div>
+              <div class="notification-content">
+                <p class="notification-title"></p>
+                <p class="notification-meta"></p>
+              </div>`;
+            // add delete button (hidden until hover)
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'notification-delete';
+            del.setAttribute('aria-label', 'Delete notification');
+            // simpler X icon for delete
+            del.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+            // attach dataset id for deletion
+            del.dataset.notificationId = item.id || '';
+            // on click, call delete API and remove item
+            del.addEventListener('click', async (ev) => {
+              ev.stopPropagation();
+              const nid = del.dataset.notificationId;
+              if (!nid) return;
+              // confirmation step (use stylized modal if available)
+              let confirmed = true;
+              if (window.GOMK && window.GOMK.confirmDialog) {
+                confirmed = await window.GOMK.confirmDialog('Delete this notification? This cannot be undone.', { okText: 'Delete', cancelText: 'Cancel' });
+              } else {
+                confirmed = window.confirm('Delete this notification? This cannot be undone.');
+              }
+              if (!confirmed) return;
+              del.disabled = true;
+              try {
+                const fd = new FormData();
+                fd.append('notification_id', nid);
+                const r = await fetch('api/notifications_delete.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+                const res = await r.json().catch(() => ({}));
+                if (r.ok && res && res.success) {
+                  // remove from DOM
+                  li.remove();
+                  // update unread dot if needed
+                  if (notificationDot && (item.is_read === 0 || item.is_read === false)) {
+                    // re-check unread count quickly
+                    try {
+                      const rr = await fetch('api/notifications_list.php?limit=1', { credentials: 'same-origin' });
+                      if (rr.ok) {
+                        const dd = await rr.json().catch(() => ({}));
+                        if (dd && (dd.unreadCount || 0) > 0) notificationDot.removeAttribute('hidden');
+                        else notificationDot.setAttribute('hidden', 'hidden');
+                        if (typeof setCaughtUp === 'function') setCaughtUp(!(dd && (dd.unreadCount || 0) > 0));
+                      }
+                    } catch (e) {}
+                  }
+                } else {
+                  (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Unable to delete notification', { type: 'error' }) : alert('Unable to delete notification');
+                  del.disabled = false;
+                }
+              } catch (e) {
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Unable to delete notification', { type: 'error' }) : alert('Unable to delete notification');
+                del.disabled = false;
+              }
+            });
+            li.appendChild(del);
+            li.querySelector('.notification-title').textContent = item.title || 'Notification';
+            li.querySelector('.notification-meta').textContent = item.meta || '';
+            notificationList.appendChild(li);
+          });
+          if (!data.data.length) {
+            notificationList.innerHTML = '<div class="notification-empty">No notifications yet.</div>';
+          }
+
+          // Constrain height to ~4 items; enable scrolling if there are more
+          const items = notificationList.querySelectorAll('.notification-item');
+          if (items.length > 4) {
+            const firstH = items[0]?.offsetHeight || 64;
+            const pad = 16; // small breathing room
+            notificationList.style.maxHeight = (firstH * 4 + pad) + 'px';
+            notificationList.style.overflowY = 'auto';
+          } else {
+            notificationList.style.maxHeight = '';
+            notificationList.style.overflowY = '';
+          }
+        }
+
+        if (notificationDot) {
+          if ((data.unreadCount || 0) > 0) notificationDot.removeAttribute('hidden');
+          else notificationDot.setAttribute('hidden', 'hidden');
+        }
+        setCaughtUp(!data || (data.unreadCount || 0) === 0);
+        notificationsLoaded = true; // mark success
+      } catch (e) {
+        // network error: keep retry capability and show a friendly note
+        notificationsLoaded = false;
+        if (notificationDot) {
+          notificationList.innerHTML = '<div class="notification-empty">Can\'t connect. Please try again.</div>';
+        }
+        if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+      }
+    }
   }
+
+  // Admin: wire status dropdowns to API endpoint
+  (function initAdminStatusWiring() {
+    const adminForms = Array.from(document.querySelectorAll('.admin-inline-form'));
+    if (!adminForms.length) return;
+
+    adminForms.forEach((form) => {
+      const actionInput = form.querySelector('input[name="action"][value="update_status"]');
+      const select = form.querySelector('select[name="status"]');
+      if (!actionInput || !select) return;
+
+      const reportIdInput = form.querySelector('input[name="report_id"]');
+      const reportId = reportIdInput ? reportIdInput.value : '';
+
+      const handleChange = async () => {
+        const status = select.value;
+        select.disabled = true;
+        try {
+          const fd = new FormData();
+          fd.append('report_id', reportId);
+          fd.append('status', status);
+          const r = await fetch('api/reports_update_status.php', { method: 'POST', body: fd });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || !data.success) {
+            throw new Error(data.message || 'Failed to update status');
+          }
+          select.classList.add('saved');
+          setTimeout(() => select.classList.remove('saved'), 800);
+        } catch (e) {
+          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast(e.message || 'There was a problem updating the status.', { type: 'error' });
+          else alert(e.message || 'There was a problem updating the status.');
+        } finally {
+          select.disabled = false;
+        }
+      };
+
+      select.addEventListener('change', (ev) => {
+        ev.preventDefault();
+        handleChange();
+      });
+    });
+  })();
 
   // Auth card mode toggle (login <-> signup) on profile page.
   const authCard = document.querySelector('.auth-card');
@@ -826,7 +1195,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const photoInput = document.getElementById('photoInput');
     const photoPreview = document.getElementById('photoPreview');
 
-    if (photoUploadArea && photoInput && photoPreview) {
+  if (photoUploadArea && photoInput && photoPreview) {
       console.log('Photo upload elements found, initializing...');
       
       // Click to upload
@@ -855,15 +1224,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
+      // Keep a reference to the last selected image file (pre-crop)
+      let selectedImageFile = null;
+
       // File input change
       photoInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
+          selectedImageFile = e.target.files[0];
           handleFileSelect(e.target.files[0]);
         }
       });
 
       function handleFileSelect(file) {
         if (file && file.type.startsWith('image/')) {
+          // Keep a reference so we can still upload if the user submits without cropping
+          selectedImageFile = file;
           const reader = new FileReader();
           reader.onload = (e) => {
             showCropModal(e.target.result);
@@ -1059,6 +1434,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const dataTransfer = new DataTransfer();
           dataTransfer.items.add(file);
           photoInput.files = dataTransfer.files;
+          selectedImageFile = file; // Replace the original with the cropped one
           
           hideCropModal();
         }, 'image/jpeg', 0.9);
@@ -1075,29 +1451,55 @@ document.addEventListener('DOMContentLoaded', () => {
           const title = formData.get('title');
           const description = formData.get('description');
           const location = formData.get('location');
+          const currentPhoto = formData.get('photo');
           
           if (!category) {
-            alert('Please select a category');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please select a category', { type: 'info' }) : alert('Please select a category');
             return;
           }
           
           if (!title.trim()) {
-            alert('Please enter a title for your concern');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a title for your concern', { type: 'info' }) : alert('Please enter a title for your concern');
             return;
           }
           
           if (!description.trim()) {
-            alert('Please enter a description');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a description', { type: 'info' }) : alert('Please enter a description');
             return;
           }
           
           if (!location.trim()) {
-            alert('Please enter a location');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a location', { type: 'info' }) : alert('Please enter a location');
             return;
           }
-          
-          alert('Report submitted successfully!\\n\\nTitle: ' + title + '\\nCategory: ' + category + '\\nDescription: ' + description + '\\nLocation: ' + location);
-          clearForm();
+
+          // If user selected a photo but didn't confirm crop, ensure it's still uploaded
+          if ((!currentPhoto || (currentPhoto && typeof currentPhoto === 'string')) && selectedImageFile instanceof File) {
+            formData.set('photo', selectedImageFile, selectedImageFile.name || 'photo.jpg');
+          }
+
+          // Submit to backend
+          fetch('api/reports_create.php', {
+            method: 'POST',
+            body: formData,
+          })
+          .then(async (r) => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.success) {
+              const msg = data && data.message ? data.message : 'Failed to submit report.';
+              throw new Error(msg);
+            }
+            return data;
+          })
+          .then((data) => {
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Report submitted successfully!', { type: 'success' }) : alert('Report submitted successfully!');
+            clearForm();
+            // Optional: redirect back to home to see it in the feed
+            setTimeout(() => { window.location.href = 'index.php#reports'; }, 300);
+          })
+          .catch((err) => {
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast(err.message || 'There was a problem submitting your report.', { type: 'error' }) : alert(err.message || 'There was a problem submitting your report.');
+          });
         });
       }
 
@@ -1179,9 +1581,9 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             editPasswordBtn.title = 'Edit password';
             
-            alert('Password updated successfully!');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password updated successfully!', { type: 'success' }) : alert('Password updated successfully!');
           } else {
-            alert('Password must be at least 6 characters long');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password must be at least 6 characters long', { type: 'info' }) : alert('Password must be at least 6 characters long');
             passwordField.focus();
           }
         }
@@ -1219,9 +1621,9 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             editMobileBtn.title = 'Edit mobile number';
             
-            alert('Mobile number updated successfully!');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Mobile number updated successfully!', { type: 'success' }) : alert('Mobile number updated successfully!');
           } else {
-            alert('Please enter a valid Philippine mobile number starting with +63');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a valid Philippine mobile number starting with +63', { type: 'info' }) : alert('Please enter a valid Philippine mobile number starting with +63');
             mobileField.focus();
           }
         }
@@ -1304,11 +1706,11 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           
           // Show success message
-          alert('Login successful! Welcome to your profile.');
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Login successful! Welcome to your profile.', { type: 'success' }) : alert('Login successful! Welcome to your profile.');
           
           console.log('User logged in successfully');
         } else {
-          alert('Please enter both email and password');
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter both email and password', { type: 'info' }) : alert('Please enter both email and password');
         }
       });
     }
@@ -1357,11 +1759,11 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           
           // Show success message
-          alert('Login successful! You can now create a report.');
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Login successful! You can now create a report.', { type: 'success' }) : alert('Login successful! You can now create a report.');
           
           console.log('User logged in successfully for create report');
         } else {
-          alert('Please enter both email and password');
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter both email and password', { type: 'info' }) : alert('Please enter both email and password');
         }
       });
     }
@@ -1371,4 +1773,64 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('createReportContent')) {
     initializeCreateReportLogin();
   }
+
+  // Smooth scrolling for in-page anchors and on-hash load
+  // Notes:
+  // - CSS `html { scroll-behavior: smooth; }` animates only same-document scrolls.
+  // - When navigating from another page to index.php#reports, browsers typically jump; we re-apply a smooth scroll after load for consistency.
+  (function setupSmoothScroll() {
+    const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior = prefersReduced ? 'auto' : 'smooth';
+
+    const getTarget = (hash) => {
+      if (!hash) return null;
+      const id = decodeURIComponent(String(hash).replace(/^#/, ''));
+      if (!id) return null;
+      return document.getElementById(id);
+    };
+
+    const smoothScrollTo = (el) => {
+      if (!el) return;
+      // If you add a sticky header later, set a non-zero offset here.
+      el.scrollIntoView({ behavior, block: 'start' });
+    };
+
+    // Same-page hash links like #top, #reports
+    const samePageAnchors = Array.from(document.querySelectorAll('a[href^="#"]'));
+    samePageAnchors.forEach((a) => {
+      const href = a.getAttribute('href') || '';
+      const target = getTarget(href);
+      if (!target) return;
+
+      a.addEventListener('click', (e) => {
+        // Ignore modified clicks and non-left clicks
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+
+        // Close mobile nav if open so scroll isn't blocked
+        if (document.body.classList.contains('nav-open')) {
+          document.body.classList.remove('nav-open');
+          const scrim = document.querySelector('[data-nav-scrim]');
+          scrim?.setAttribute('hidden', 'hidden');
+        }
+
+        smoothScrollTo(target);
+
+        // Update the hash without triggering a jump
+        if (history.pushState) {
+          history.pushState(null, '', href);
+        } else {
+          window.location.hash = href;
+        }
+      });
+    });
+
+    // If we arrived with a hash (e.g., index.php#reports), re-apply a smooth scroll
+    if (window.location.hash) {
+      const target = getTarget(window.location.hash);
+      if (target) {
+        requestAnimationFrame(() => smoothScrollTo(target));
+      }
+    }
+  })();
 });

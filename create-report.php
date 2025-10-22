@@ -36,7 +36,7 @@ require __DIR__ . '/config/auth.php';
             <div id="createReportContent">
                 <div class="create-report-container">
 
-                    <form class="create-report-form" id="createReportForm" enctype="multipart/form-data">
+                    <form class="create-report-form" id="createReportForm" method="post" action="api/reports_create.php" enctype="multipart/form-data">
                     <!-- Photo Upload Section -->
                     <div class="photo-upload-section">
                         <div class="photo-upload-area" id="photoUploadArea">

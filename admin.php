@@ -1,8 +1,10 @@
 <?php
 require __DIR__ . '/config/auth.php';
+require __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_admin();
 
+// Non-JS fallback: allow status updates/deletes via POST to this page
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -10,24 +12,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $reportId = (int)($_POST['report_id'] ?? 0);
         $status = $_POST['status'] ?? 'unresolved';
         $validStatuses = ['unresolved', 'in_progress', 'solved'];
-
         if ($reportId && in_array($status, $validStatuses, true)) {
-            foreach ($_SESSION['reports'] as &$report) {
-                if ($report['id'] === $reportId) {
-                    $report['status'] = $status;
-                    break;
-                }
-            }
-            unset($report);
+            $stmt = $conn->prepare('UPDATE reports SET status = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->bind_param('si', $status, $reportId);
+            $stmt->execute();
+            $stmt->close();
             $_SESSION['admin_feedback'] = 'Report status updated.';
         }
     } elseif ($action === 'delete_report') {
         $reportId = (int)($_POST['report_id'] ?? 0);
         if ($reportId) {
-            $_SESSION['reports'] = array_values(array_filter(
-                $_SESSION['reports'],
-                fn($report) => $report['id'] !== $reportId
-            ));
+            $stmt = $conn->prepare('DELETE FROM reports WHERE id = ?');
+            $stmt->bind_param('i', $reportId);
+            $stmt->execute();
+            $stmt->close();
             $_SESSION['admin_feedback'] = 'Report deleted.';
         }
     }
@@ -36,9 +34,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-$reports = $_SESSION['reports'] ?? [];
+// Load reports from DB
+$reports = [];
 $feedback = $_SESSION['admin_feedback'] ?? null;
 unset($_SESSION['admin_feedback']);
+
+try {
+    $res = $conn->query('SELECT id, title, category, description, location, image_path, status, created_at FROM reports ORDER BY created_at DESC LIMIT 500');
+    if ($res) {
+        while ($r = $res->fetch_assoc()) {
+            $reports[] = [
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'category' => $r['category'],
+                'reporter' => 'Resident',
+                'location' => $r['location'],
+                'submitted_at' => $r['created_at'],
+                'summary' => $r['description'],
+                'image' => $r['image_path'],
+                'status' => $r['status'],
+            ];
+        }
+    }
+} catch (Throwable $e) {
+    $reports = [];
+}
 
 $totalReports = count($reports);
 $statusCounts = [
@@ -64,11 +84,7 @@ $inProgressRate = $totalReports > 0
     ? round(($statusCounts['in_progress'] / $totalReports) * 100)
     : 0;
 
-$latestReport = null;
-if ($totalReports) {
-    $latestReport = end($reports);
-    reset($reports);
-}
+$latestReport = $reports[0] ?? null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -201,7 +217,7 @@ if ($totalReports) {
                                                 <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
                                                 <label class="admin-select-wrapper">
                                                     <span class="visually-hidden">Select status</span>
-                                                    <select name="status" class="admin-select" onchange="this.form.submit()">
+                                                    <select name="status" class="admin-select">
                                                         <option value="unresolved"<?php if ($report['status'] === 'unresolved') echo ' selected'; ?>>Unresolved</option>
                                                         <option value="in_progress"<?php if ($report['status'] === 'in_progress') echo ' selected'; ?>>In Progress</option>
                                                         <option value="solved"<?php if ($report['status'] === 'solved') echo ' selected'; ?>>Solved</option>
@@ -210,7 +226,7 @@ if ($totalReports) {
                                             </form>
                                         </td>
                                         <td data-title="Actions">
-                                            <form method="post" class="admin-inline-form" onsubmit="return confirm('Delete this report?');">
+                                            <form method="post" class="admin-inline-form" data-confirm-message="Delete this report?">
                                                 <input type="hidden" name="action" value="delete_report">
                                                 <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
                                                 <button type="submit" class="admin-delete">Delete</button>

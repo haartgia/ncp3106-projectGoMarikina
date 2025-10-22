@@ -1,5 +1,6 @@
 <?php
   require_once __DIR__ . '/../config/auth.php';
+  require_once __DIR__ . '/../includes/helpers.php';
 
   // Determine the current PHP page so we can mark the matching nav link as active.
   $currentPath = basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
@@ -23,15 +24,14 @@
 <div class="nav-scrim" aria-hidden="true"></div>
 
 <aside id="primary-sidebar" class="sidebar" aria-label="Primary navigation">
+  <?php $initials = is_logged_in() ? user_initials(current_user(), 'GU') : 'GU'; ?>
   <div class="sidebar-profile" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" data-user-menu-toggle>
     <div class="sidebar-avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
-      </svg>
+      <!-- Show user initials inside the avatar circle -->
+      <span style="font-weight:700;font-size:14px;"><?= htmlspecialchars($initials, ENT_QUOTES, 'UTF-8') ?></span>
     </div>
     <div class="sidebar-profile-text">
-      <span class="sidebar-greeting">User</span>
+      <span class="sidebar-greeting"><?= htmlspecialchars($initials, ENT_QUOTES, 'UTF-8') ?></span>
     </div>
   </div>
 

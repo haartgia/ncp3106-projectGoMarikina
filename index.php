@@ -1,17 +1,58 @@
 <?php
 require __DIR__ . '/config/auth.php';
+require __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 
-$announcements = $_SESSION['announcements'] ?? [];
-$announcementCount = count($announcements);
-$reports = $_SESSION['reports'] ?? [];
+// Load announcements from DB if table exists; otherwise fallback to session
+$announcements = [];
+try {
+    $check = $conn->query("SHOW TABLES LIKE 'announcements'");
+    if ($check && $check->num_rows > 0) {
+        $res = $conn->query("SELECT id, title, body, image_path, created_at FROM announcements ORDER BY created_at DESC LIMIT 200");
+        if ($res) {
+            while ($a = $res->fetch_assoc()) {
+                $announcements[] = [
+                    'id' => (int)($a['id'] ?? 0),
+                    'title' => $a['title'] ?? '',
+                    'body' => $a['body'] ?? '',
+                    'image' => $a['image_path'] ?? null,
+                    'created_at' => $a['created_at'] ?? null,
+                ];
+            }
+        }
+    } else {
+        $announcements = $_SESSION['announcements'] ?? [];
+    }
+} catch (Throwable $e) {
+    $announcements = $_SESSION['announcements'] ?? [];
+}
+$announcementCount = is_array($announcements) ? count($announcements) : 0;
 
-usort($reports, static function (array $a, array $b): int {
-    $dateA = parse_datetime_string($a['submitted_at'] ?? '') ?? new DateTimeImmutable('1970-01-01');
-    $dateB = parse_datetime_string($b['submitted_at'] ?? '') ?? new DateTimeImmutable('1970-01-01');
-
-    return $dateB <=> $dateA;
-});
+// Load reports from DB for consistency across users
+$reports = [];
+try {
+    $sql = "SELECT id, title, category, description, location, image_path, status, created_at FROM reports ORDER BY created_at DESC LIMIT 200";
+    $res = $conn->query($sql);
+    if ($res) {
+        while ($r = $res->fetch_assoc()) {
+            $reports[] = [
+                'id' => (int)$r['id'],
+                'title' => $r['title'] ?? 'Citizen report',
+                'category' => $r['category'] ?? 'Report',
+                'status' => $r['status'] ?? 'unresolved',
+                'reporter' => 'Resident',
+                'location' => $r['location'] ?? '',
+                'submitted_at' => $r['created_at'] ?? null,
+                'summary' => $r['description'] ?? '',
+                'image' => $r['image_path'] ?? null,
+                'tags' => [],
+            ];
+        }
+    }
+} catch (Throwable $e) {
+    // Fallback to session if DB unavailable
+    $reports = $_SESSION['reports'] ?? [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,7 +96,7 @@ usort($reports, static function (array $a, array $b): int {
                                 <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16z" />
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                             </svg>
-                            <span class="notification-dot" aria-hidden="true"></span>
+                            <span class="notification-dot" aria-hidden="true" hidden></span>
                         </button>
                         <section class="notification-panel" id="dashboardNotifications" aria-labelledby="notificationPanelTitle" role="dialog" aria-modal="false" tabindex="-1" hidden data-notification-panel>
                             <header class="notification-panel-header">
@@ -101,29 +142,23 @@ usort($reports, static function (array $a, array $b): int {
                                     </div>
                                 </article>
                             </div>
-                            <footer class="notification-panel-footer">
-                                <a href="#" class="notification-footer-link">View all activity</a>
-                            </footer>
+                            
                         </section>
                     </div>
                 </div>
             </header>
 
-            <!-- Hero banner keeps branding artwork -->
-            <section class="dashboard-hero" id="hero" aria-label="Go Marikina banner">
-                <div class="hero-card">
-                    <img src="./uploads/go_marikina_logo.png" alt="GO! MARIKINA">
-                </div>
-            </section>
-
-            <section class="announcements-section" id="announcements" aria-labelledby="announcements-title">
+            <!-- Hero now shows announcements -->
+            <section class="dashboard-hero" id="hero" aria-label="Announcements">
+                <section class="announcements-section" id="announcements" aria-labelledby="announcements-title">
                 <div class="announcements-header">
                     <div>
                         <p class="announcements-kicker">City updates</p>
                         <h2 id="announcements-title">Latest announcements</h2>
                         <p class="announcements-subtitle">Stay informed about advisories, closures, and safety reminders from city hall.</p>
                     </div>
-                    <span class="announcements-count" aria-live="polite">Total: <?php echo $announcementCount; ?></span>
+
+                    <!-- Widgets removed as requested -->
                 </div>
 
                 <?php if ($announcements): ?>
@@ -152,6 +187,7 @@ usort($reports, static function (array $a, array $b): int {
                         <p>New advisories from the local government will appear here. Check back soon or subscribe in your profile preferences.</p>
                     </div>
                 <?php endif; ?>
+                </section>
             </section>
 
             <!-- Reports listing; search/filter logic is coordinated via assets/js/script.js -->
@@ -193,7 +229,20 @@ usort($reports, static function (array $a, array $b): int {
                                 $titleDisplay = htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8');
                                 $reporterDisplay = htmlspecialchars($report['reporter'] ?? 'Resident', ENT_QUOTES, 'UTF-8');
                                 $locationDisplay = !empty($report['location']) ? htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8') : '';
-                                $summaryDisplay = htmlspecialchars($report['summary'] ?? '', ENT_QUOTES, 'UTF-8');
+                                // Full, sanitized summary for attributes/modal
+                                $rawSummary = (string)($report['summary'] ?? '');
+                                $summaryDisplayFull = htmlspecialchars($rawSummary, ENT_QUOTES, 'UTF-8');
+                                // Truncated summary for card
+                                $summaryLimit = 160;
+                                $rawLen = function_exists('mb_strlen') ? mb_strlen($rawSummary, 'UTF-8') : strlen($rawSummary);
+                                $isTruncated = $rawLen > $summaryLimit;
+                                if ($isTruncated) {
+                                    $truncRaw = function_exists('mb_substr') ? mb_substr($rawSummary, 0, $summaryLimit, 'UTF-8') : substr($rawSummary, 0, $summaryLimit);
+                                    $truncRaw .= '…';
+                                    $summaryTrimDisplay = htmlspecialchars($truncRaw, ENT_QUOTES, 'UTF-8');
+                                } else {
+                                    $summaryTrimDisplay = $summaryDisplayFull;
+                                }
                                 $categoryDisplay = htmlspecialchars($report['category'] ?? 'Report', ENT_QUOTES, 'UTF-8');
                                 $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                 $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
@@ -210,7 +259,7 @@ usort($reports, static function (array $a, array $b): int {
                                 data-report-modal-trigger
                                 data-status="<?php echo htmlspecialchars($datasetStatus, ENT_QUOTES, 'UTF-8'); ?>"
                                 data-title="<?php echo $titleDisplay; ?>"
-                                data-summary="<?php echo $summaryDisplay; ?>"
+                                data-summary="<?php echo $summaryDisplayFull; ?>"
                                 data-reporter="<?php echo $reporterDisplay; ?>"
                                 data-category="<?php echo $categoryDisplay; ?>"
                                 data-status-label="<?php echo $statusLabelDisplay; ?>"
@@ -259,8 +308,8 @@ usort($reports, static function (array $a, array $b): int {
                                         <span class="chip chip-status <?php echo $statusModifierDisplay; ?>" data-report-modal-status-label><?php echo $statusLabelDisplay; ?></span>
                                     </div>
                                 </header>
-                                <?php if ($summaryDisplay !== ''): ?>
-                                    <p class="report-summary"><?php echo $summaryDisplay; ?></p>
+                                <?php if ($summaryTrimDisplay !== ''): ?>
+                                    <p class="report-summary"><?php echo $summaryTrimDisplay; ?><?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?></p>
                                 <?php endif; ?>
                                 <?php if ($imageAttr !== ''): ?>
                                     <figure class="report-media aspect-8-4">

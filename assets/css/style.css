@@ -204,6 +204,10 @@ body.modal-open {
   color: rgba(255, 255, 255, 0.9);
   line-height: 1.6;
   font-size: 0.95rem;
+  /* Defensive wrapping for very long, unspaced content inside announcements modal */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .modal-empty {
@@ -828,6 +832,55 @@ body.nav-open .sidebar-logo {
   gap: 14px;
 }
 
+.notification-item.is-unread {
+  border-left: 4px solid var(--chip-blue);
+  padding-left: 10px; /* visually balance the thicker left border */
+  background: linear-gradient(90deg, rgba(28,95,219,0.03), transparent);
+}
+
+/* Delete control shown on hover: a red pill on the right with an X */
+.notification-item {
+  position: relative;
+}
+
+
+.notification-delete {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(216,69,69,0.06);
+  color: var(--chip-red);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(216,69,69,0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 160ms ease;
+}
+
+/* show on hover or when the delete button receives focus (keyboard users) */
+.notification-item:hover .notification-delete,
+.notification-delete:focus,
+.notification-delete:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+/* keep room on the right so the delete button doesn't overlap content */
+.notification-item {
+  padding-right: 52px;
+}
+
+.notification-delete .sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;
+}
+
 .notification-item {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -918,8 +971,13 @@ body.nav-open .sidebar-logo {
 
 /* Branding hero banner */
 .dashboard-hero {
-  display: flex;
-  justify-content: flex-start;
+  /* Use block so inner sections naturally take full width */
+  display: block;
+}
+
+/* Ensure announcements fill the hero width */
+.dashboard-hero .announcements-section {
+  width: 100%;
 }
 
 .dashboard-hero .hero-card {
@@ -1325,7 +1383,7 @@ body.nav-open .sidebar-logo {
   font-size: 1.25rem;
   font-weight: 700;
   color: #1a1f36;
-  margin-bottom: 4px;
+  margin-bottom: 0; /* tighter spacing to the meta line */
 }
 
 .report-title-row {
@@ -1333,7 +1391,7 @@ body.nav-open .sidebar-logo {
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
-  gap: 6px;
+  gap: 2px; /* reduce gap so title and date/time are closer */
 }
 
 .report-author p {
@@ -1347,7 +1405,7 @@ body.nav-open .sidebar-logo {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: 4px;
+  margin-top: 0; /* tighter spacing to the title */
 }
 .report-header-actions {
   display: flex;
@@ -1424,6 +1482,24 @@ body.nav-open .sidebar-logo {
   line-height: 1.68;
   color: var(--text-muted);
   flex: 1 1 auto;
+  /* Prevent extremely long, unspaced strings from overflowing cards */
+  overflow-wrap: anywhere; /* modern, best-effort breaking */
+  word-break: break-word;  /* legacy fallback */
+  hyphens: auto;
+}
+
+/* See more link styling inside card summaries */
+.report-summary .report-see-more,
+.report-summary .report-see-less {
+  color: var(--chip-blue);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.report-summary .report-see-more:hover,
+.report-summary .report-see-less:hover {
+  text-decoration: underline;
 }
 
 /* Media container for reports */
@@ -1573,6 +1649,9 @@ body.modal-open {
   transform: translateY(24px) scale(0.96);
   opacity: 0;
   transition: transform var(--transition), opacity var(--transition);
+  /* Ensure unbroken strings don't cause horizontal overflow inside modal */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .report-modal.is-open .report-modal__dialog {
@@ -1632,6 +1711,9 @@ body.modal-open {
   line-height: 1.2;
   margin: 0;
   font-weight: 700;
+  /* Prevent long titles from overflowing */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .report-modal__submitted {
@@ -1695,6 +1777,9 @@ body.modal-open {
   font-size: 1rem;
   color: var(--text-primary);
   font-weight: 500;
+  /* Long locations or reporter names shouldn't overflow */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .report-modal__summary h4 {
@@ -1707,6 +1792,10 @@ body.modal-open {
   font-size: 0.98rem;
   line-height: 1.7;
   color: var(--text-muted);
+  /* Defensive wrapping for very long, unspaced content */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .report-modal__media {
@@ -4561,9 +4650,79 @@ body.nav-open .nav-scrim {
 .announcements-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
+  position: relative;
 }
+
+/* Right side: weather + big clock */
+.announcements-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  padding-left: 20px;
+  border-left: 1px solid rgba(13, 61, 135, 0.14);
+  margin-left: auto; /* push aside to the right */
+}
+
+.announcements-aside .aside-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.announcements-aside .aside-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-weather {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(13, 61, 135, 0.12);
+  box-shadow: 0 10px 24px -18px rgba(13, 61, 135, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.weather-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.hero-clock { /* legacy selector kept for compatibility; not used in new layout */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+.hero-date {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.hero-time {
+  font-weight: 700; /* heaviest available in import */
+  color: var(--text-primary);
+  font-size: clamp(2.2rem, 6.8vw, 4rem);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgba(12, 61, 135, 0.08);
+}
+
+/* Count pill now lives beside the date in the aside top row */
+/* removed total pill */
+
+/* Meta row under the announcements title */
+/* Meta pills removed per request */
 
 .announcements-kicker {
   font-size: 0.8rem;
@@ -4587,16 +4746,7 @@ body.nav-open .nav-scrim {
   font-size: 1rem;
 }
 
-.announcements-count {
-  display: inline-flex;
-  align-items: center;
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: rgba(22, 93, 216, 0.12);
-  color: var(--sidebar-bg);
-  font-weight: 600;
-  white-space: nowrap;
-}
+/* .announcements-count removed */
 
 .announcements-grid {
   margin-top: clamp(22px, 4vw, 32px);
@@ -4703,10 +4853,26 @@ body.nav-open .nav-scrim {
     align-items: flex-start;
   }
 
-  .announcements-count {
-    margin-top: 4px;
+  .announcements-aside {
+    order: 2;
+    align-items: flex-start;
+    border-left: none;
+    padding-left: 0;
+    gap: 8px;
+  }
+
+  .announcements-aside .aside-top {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .announcements-aside .aside-main {
+    gap: 10px;
   }
 }
+
+/* Desktop hero refinements removed per request */
 
 @media (max-width: 1080px) {
   .admin-hero {
@@ -4777,3 +4943,100 @@ body.nav-open .nav-scrim {
     border-radius: 12px;
   }
 }
+
+/* Stylized toast container (bottom-right) */
+.gomk-toast-container {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.gomk-toast {
+  pointer-events: auto;
+  min-width: 260px;
+  max-width: 420px;
+  background: linear-gradient(180deg, #0b2b59, #0d3b76);
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(6, 24, 64, 0.6);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateY(10px);
+  opacity: 0;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.gomk-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.gomk-toast .toast-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.08);
+}
+
+/* Confirm modal overlay */
+.gomk-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 12, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1300;
+}
+
+.gomk-confirm-overlay.open {
+  display: flex;
+}
+
+.gomk-confirm {
+  width: 420px;
+  max-width: calc(100% - 40px);
+  background: var(--surface);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(3,6,12,0.6);
+}
+
+.gomk-confirm .confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.gomk-confirm .btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.gomk-confirm .btn.danger {
+  background: var(--chip-red);
+  color: white;
+}
+
+.gomk-confirm .btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+}
+
+/* Bottom activity bar (centered) */
+/* Bottom activity bar removed per request */

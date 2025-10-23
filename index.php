@@ -243,7 +243,7 @@ try {
                                 } else {
                                     $summaryTrimDisplay = $summaryDisplayFull;
                                 }
-                                $categoryDisplay = htmlspecialchars($report['category'] ?? 'Report', ENT_QUOTES, 'UTF-8');
+                                $categoryDisplay = htmlspecialchars(category_label($report['category'] ?? ''), ENT_QUOTES, 'UTF-8');
                                 $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                 $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
                                 $submittedAttr = htmlspecialchars($submittedDisplay, ENT_QUOTES, 'UTF-8');

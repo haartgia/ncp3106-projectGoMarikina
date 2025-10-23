@@ -208,7 +208,7 @@ $latestReport = $reports[0] ?? null;
                                 <?php foreach ($reports as $report): ?>
                                     <tr>
                                         <td data-title="Title"><?php echo htmlspecialchars($report['title']); ?></td>
-                                        <td data-title="Category"><?php echo htmlspecialchars($report['category']); ?></td>
+                                        <td data-title="Category"><?php echo htmlspecialchars(category_label($report['category'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td data-title="Reporter"><?php echo htmlspecialchars($report['reporter']); ?></td>
                                         <td data-title="Submitted"><?php echo htmlspecialchars(format_datetime_display($report['submitted_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td data-title="Status">

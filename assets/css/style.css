@@ -261,6 +261,17 @@ button {
   cursor: pointer;
 }
 
+/* Ensure all form controls use Poppins */
+input,
+select,
+textarea,
+button,
+label,
+.form-input,
+.form-select select {
+  font-family: 'Poppins', sans-serif !important;
+}
+
 svg {
   /* Dashboard hero section */
   width: 24px;
@@ -2333,7 +2344,7 @@ body.nav-open .nav-scrim {
 
 .photo-upload-area {
   width: 100%;
-  height: 400px;
+  height: 520px; /* larger upload area */
   border: 2px dashed var(--border-soft);
   border-radius: var(--radius-medium);
   background: #f8f9fc;
@@ -2345,7 +2356,7 @@ body.nav-open .nav-scrim {
   cursor: pointer;
   transition: all var(--transition);
   position: relative;
-  overflow: hidden;
+  overflow: visible; /* allow the delete X to sit just outside border */
 }
 
 .photo-upload-area:hover {
@@ -2395,6 +2406,8 @@ body.nav-open .nav-scrim {
   object-fit: cover;
   border-radius: var(--radius-medium);
   display: none;
+  position: relative;
+  z-index: 1;
 }
 
 .photo-upload-area.has-photo .photo-preview {
@@ -2407,11 +2420,45 @@ body.nav-open .nav-scrim {
   display: none;
 }
 
+/* Delete (X) button on uploaded photo */
+.photo-delete {
+  position: absolute;
+  /* place just outside the top-right corner */
+  top: -10px;
+  right: -10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  border: 1px solid rgba(255,255,255,0.35);
+  z-index: 3;               /* ensure above preview image */
+  pointer-events: auto;      /* clickable even if parent has overlay */
+  box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+}
+
+.photo-upload-area.has-photo .photo-delete { display: flex; }
+
+/* Slightly dim background clicks when a photo is present to avoid mis-clicks */
+.photo-upload-area.has-photo { cursor: default; }
+
+@media (max-width: 768px) {
+  .photo-delete { width: 32px; height: 32px; top: -8px; right: -8px; font-size: 18px; }
+}
+
 .form-buttons {
   display: flex;
   gap: 16px;
-  margin-top: auto;
+  margin-top: 20px;
 }
+
+/* Make action buttons span below both columns */
+.create-report-form > .form-buttons { grid-column: 1 / -1; }
 
 .btn-cancel {
   flex: 1;
@@ -2573,9 +2620,7 @@ body.nav-open .nav-scrim {
     font-size: 2rem;
   }
 
-  .photo-upload-area {
-    height: 300px;
-  }
+  .photo-upload-area { height: 360px; }
 }
 
 @media (max-width: 480px) {
@@ -2615,6 +2660,41 @@ body.nav-open .nav-scrim {
   display: flex;
   flex-direction: column;
 }
+
+/* Modal header styles */
+.crop-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 12px;
+}
+
+.crop-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.crop-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eef2fb;
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(16, 38, 84, 0.08);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.crop-close:hover { background: #e2e8f7; transform: translateY(-1px); }
 
 .crop-container {
   display: flex;
@@ -2659,6 +2739,24 @@ body.nav-open .nav-scrim {
   box-sizing: border-box;
 }
 
+/* Resizable handles for free crop */
+.crop-box .handle {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #2196f3;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.crop-box .handle.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.crop-box .handle.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.crop-box .handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.crop-box .handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.crop-box .handle.n { top: -7px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.crop-box .handle.s { bottom: -7px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.crop-box .handle.w { left: -7px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.crop-box .handle.e { right: -7px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+
 .crop-controls {
   display: flex;
   flex-direction: column;
@@ -2689,7 +2787,7 @@ body.nav-open .nav-scrim {
   color: white;
   border: none;
   padding: 12px 24px;
-  border-radius: var(--radius);
+  border-radius: 16px !important; /* ensure same rounded corners as Cancel */
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition);
@@ -2724,6 +2822,36 @@ body.nav-open .nav-scrim {
   align-items: center;
   gap: 24px;
   text-transform: uppercase;
+}
+
+/* Centered variant for pages that require only a logo (e.g., Create Report) */
+.auth-header--centered {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  margin: 0 0 24px 0;   /* increased gap under the logo */
+  padding: 0;           /* no inner padding that could create gaps */
+  line-height: 0;       /* eliminate residual inline spacing */
+}
+
+.auth-centered-logo {
+  height: 100px;
+  width: auto;
+  display: block;
+  line-height: 0;
+}
+
+/* Create Report page: remove vertical gaps between header and form */
+.create-report-main {
+  gap: 0; /* keep layout gap disabled; header provides the small spacing */
+}
+
+.create-report-container {
+  padding-top: 0; /* eliminate gap under centered logo */
+  margin-top: 0;  /* ensure no margin separates header and form */
+}
+
+@media (max-width: 480px) {
+  .create-report-container { padding-top: 0; }
 }
 
 .auth-logo {
@@ -3094,6 +3222,13 @@ body.nav-open .nav-scrim {
 .dashboard-header .dashboard-actions {
   display: flex;
 }
+
+/* Centered header variant for profile page */
+.profile-header-centered { position: relative; background: #ffffff; padding: 0; }
+.profile-header-centered .profile-small-logo { height: 100px; width: auto; display: block; }
+.profile-header-centered .header-logo,
+.profile-header-centered .profile-title,
+.profile-header-centered .dashboard-actions { display: none !important; }
 
 .profile-section {
   margin: 24px 0;
@@ -5040,3 +5175,58 @@ body.nav-open .nav-scrim {
 
 /* Bottom activity bar (centered) */
 /* Bottom activity bar removed per request */
+
+/* === Profile page (scoped classes used in profile.php) ============= */
+.profile-section { padding: 8px 12px 0; margin: 3px 0 0; }
+.profile-card {
+  background: var(--surface);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-soft);
+  padding: 24px;
+}
+.profile-card-header { margin-bottom: 18px; }
+.profile-card-header h3 { font-size: 1rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text-primary); }
+.profile-card-body { padding-top: 4px; }
+.profile-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 24px 32px;
+  align-items: end;
+  max-width: none; /* allow full-width inside hero */
+  margin: 0;       /* remove auto-centering constraint */
+}
+@media (max-width: 1200px) { .profile-info { grid-template-columns: repeat(2, minmax(240px,1fr)); } }
+@media (max-width: 640px) { .profile-info { grid-template-columns: 1fr; } }
+.profile-field { display: flex; flex-direction: column; gap: 10px; }
+.profile-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.profile-input { background: #eff4fb; color: var(--text-primary); border: 1px solid var(--border-soft); border-radius: var(--radius-small); padding: 16px 18px; font-size: 1.05rem; width: 100%; }
+.profile-input[readonly] { cursor: default; }
+.profile-input-group { display: flex; align-items: center; gap: 10px; }
+.profile-input-group .profile-input { padding-right: 56px; }
+.profile-edit-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: var(--radius-small); border: 1px solid var(--border-soft); color: var(--text-primary); background: #eff4fb; transition: background var(--transition), color var(--transition), border-color var(--transition); }
+.profile-edit-btn:hover { background: #eaf0f8; color: var(--text-primary); border-color: var(--border-soft); }
+.profile-edit-btn svg { width: 18px; height: 18px; }
+
+/* Profile hero panel (matches announcement style) */
+.profile-hero {
+  background: #ffffff; /* full white panel as requested */
+  border: 1px solid var(--border-soft); /* subtle boundary */
+  border-radius: 28px;
+  padding: 22px; /* slightly reduced padding to minimize gaps */
+  box-shadow: 0 18px 44px -28px rgba(10, 35, 90, 0.22);
+}
+.profile-hero-head { margin: 6px 6px 14px; }
+.profile-hero-kicker { text-transform: uppercase; letter-spacing: .18em; font-size: 12px; color: #0d3d87; font-weight: 700; }
+.profile-hero-title { font-size: 34px; line-height: 1.2; color: #0a1e3f; font-weight: 700; margin-top: 8px; }
+.profile-hero-subtitle { color: #4b5b78; margin-top: 10px; max-width: 62ch; }
+.profile-hero-inner {
+  margin-top: 18px;
+  background: transparent; /* no inner box, keep one white box only */
+  border: 0;
+  border-radius: 20px;
+  padding: 0;
+}
+.profile-hero-inner .profile-card { background: transparent; box-shadow: none; padding: 0; border: 0; }
+/* Remove dark blue focus rings on inputs and edit buttons (keep subtle accessibility-friendly state via border color) */
+.profile-input:focus { outline: none; box-shadow: none; border-color: var(--border-soft); }
+.profile-edit-btn:focus { outline: none; box-shadow: none; }

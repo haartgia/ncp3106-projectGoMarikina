@@ -19,11 +19,9 @@ require __DIR__ . '/config/auth.php';
         <div class="mobile-nav-scrim" data-nav-scrim hidden></div>
 
         <!-- Main Content -->
-        <main class="dashboard-main">
-            <header class="auth-header" aria-label="Go Marikina branding">
-                <img src="./uploads/go_marikina_logo.png" alt="Go Marikina" class="auth-logo">
-                <h1 class="auth-section-title">CREATE A REPORT</h1>
-                <span class="auth-header-spacer" aria-hidden="true"></span>
+        <main class="dashboard-main create-report-main">
+            <header class="auth-header auth-header--centered" aria-label="Go Marikina branding">
+                <img src="./uploads/blue_smallgomarikina.png" alt="Go Marikina" class="auth-centered-logo" />
             </header>
             
             <?php
@@ -49,13 +47,10 @@ require __DIR__ . '/config/auth.php';
                             <div class="upload-text">Upload Photo</div>
                             <div class="upload-hint">Click or drag to upload</div>
                             <img class="photo-preview" id="photoPreview" alt="Preview">
+                            <button type="button" class="photo-delete" id="photoDelete" aria-label="Remove photo" title="Remove photo">×</button>
                         </div>
                         <input type="file" id="photoInput" name="photo" accept="image/*" style="display: none;">
                         
-                        <div class="form-buttons">
-                            <button type="button" class="btn-cancel" id="clearFormBtn">CANCEL</button>
-                            <button type="submit" class="btn-upload">UPLOAD</button>
-                        </div>
                     </div>
 
                     <!-- Details Section -->
@@ -97,6 +92,12 @@ require __DIR__ . '/config/auth.php';
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Form Actions: span full width below both columns -->
+                    <div class="form-buttons">
+                        <button type="button" class="btn-cancel" id="clearFormBtn">CANCEL</button>
+                        <button type="submit" class="btn-upload">SUBMIT REPORT</button>
+                    </div>
                 </form>
             </div>
             <?php endif; ?>
@@ -119,8 +120,7 @@ require __DIR__ . '/config/auth.php';
                 </div>
                 <div class="crop-controls">
                     <div class="crop-info">
-                        <span>Drag to reposition the crop area</span>
-                        <span class="aspect-ratio">8:4 Aspect Ratio (Fixed)</span>
+                        <span>Drag to move; drag edges/corners to resize</span>
                     </div>
                     <div class="crop-buttons">
                         <button type="button" class="btn-cancel" id="cropCancel">Cancel</button>

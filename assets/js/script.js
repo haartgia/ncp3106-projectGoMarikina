@@ -1247,11 +1247,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Cropping functionality
-      let cropImage = null;
-      let cropBox = null;
-      let isDragging = false;
-      let dragStart = { x: 0, y: 0 };
+  // Cropping functionality (free crop with resize handles)
+  let cropImage = null;
+  let cropBox = null;
+  let isDragging = false;      // moving the box
+  let isResizing = false;      // resizing via handles
+  let resizeDir = null;        // which handle is active
+  let dragStart = { x: 0, y: 0 };
 
       function showCropModal(imageSrc) {
         const modal = document.getElementById('cropModal');
@@ -1281,7 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Draw image
           ctx.drawImage(img, 0, 0);
           
-          // Initialize crop box with scaled dimensions
+          // Initialize crop box with scaled dimensions (freeform, ~80% of display size)
           initializeCropBox(img.width * scale, img.height * scale);
           cropImage = img;
         };
@@ -1294,22 +1296,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cropBoxElement) return;
         
         cropBoxElement.innerHTML = '';
-        
-        const aspectRatio = 8/4;
-        
-        // Calculate maximum possible size while maintaining 8:4 ratio
-        let cropWidth = imageWidth;
-        let cropHeight = cropWidth / aspectRatio;
-        
-        // If height exceeds image bounds, scale down based on height
-        if (cropHeight > imageHeight) {
-          cropHeight = imageHeight;
-          cropWidth = cropHeight * aspectRatio;
-        }
-        
-        // Scale down slightly to ensure it fits within the image
-        cropWidth *= 0.95;
-        cropHeight *= 0.95;
+        // Free crop: start with a large centered box (80% of area)
+        let cropWidth = imageWidth * 0.8;
+        let cropHeight = imageHeight * 0.8;
         
         // Center the crop box
         const left = (imageWidth - cropWidth) / 2;
@@ -1323,6 +1312,15 @@ document.addEventListener('DOMContentLoaded', () => {
         cropBoxElement.style.position = 'absolute';
         
         cropBoxElement.addEventListener('mousedown', startDrag);
+        // Add resize handles
+        const handles = ['nw','n','ne','e','se','s','sw','w'];
+        handles.forEach((dir) => {
+          const h = document.createElement('span');
+          h.className = `handle ${dir}`;
+          h.dataset.dir = dir;
+          h.addEventListener('mousedown', startResize);
+          cropBoxElement.appendChild(h);
+        });
         
         const canvas = document.getElementById('cropCanvas');
         if (canvas) {
@@ -1351,6 +1349,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('mouseup', stopDrag);
       }
 
+      function startResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        resizeDir = e.currentTarget.dataset.dir;
+        const rect = document.querySelector('.crop-area').getBoundingClientRect();
+        dragStart.x = e.clientX - rect.left;
+        dragStart.y = e.clientY - rect.top;
+        document.addEventListener('mousemove', resizeCropBox);
+        document.addEventListener('mouseup', stopResize);
+      }
+
       function dragCropBox(e) {
         if (!isDragging || !cropBox) return;
         
@@ -1366,6 +1376,53 @@ document.addEventListener('DOMContentLoaded', () => {
         cropBox.y = Math.max(0, Math.min(newY, maxY));
         
         updateCropBoxElement();
+      }
+
+      function resizeCropBox(e) {
+        if (!isResizing || !cropBox) return;
+        e.preventDefault();
+        const area = document.querySelector('.crop-area');
+        const rect = area.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+
+        const minSize = 40; // minimum crop size in pixels
+
+        let x = cropBox.x;
+        let y = cropBox.y;
+        let w = cropBox.width;
+        let h = cropBox.height;
+
+        switch (resizeDir) {
+          case 'nw': w += x - px; h += y - py; x = px; y = py; break;
+          case 'ne': w = px - x; h += y - py; y = py; break;
+          case 'se': w = px - x; h = py - y; break;
+          case 'sw': w += x - px; x = px; h = py - y; break;
+          case 'n':  h += y - py; y = py; break;
+          case 's':  h = py - y; break;
+          case 'e':  w = px - x; break;
+          case 'w':  w += x - px; x = px; break;
+        }
+
+        // Constrain within area
+        if (x < 0) { w += x; x = 0; }
+        if (y < 0) { h += y; y = 0; }
+        if (x + w > rect.width)  w = rect.width - x;
+        if (y + h > rect.height) h = rect.height - y;
+
+        // Enforce min size
+        w = Math.max(minSize, w);
+        h = Math.max(minSize, h);
+
+        cropBox.x = x; cropBox.y = y; cropBox.width = w; cropBox.height = h;
+        updateCropBoxElement();
+      }
+
+      function stopResize() {
+        isResizing = false;
+        resizeDir = null;
+        document.removeEventListener('mousemove', resizeCropBox);
+        document.removeEventListener('mouseup', stopResize);
       }
 
       function stopDrag() {
@@ -1408,10 +1465,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const scaleX = cropImage.width / canvas.offsetWidth;
         const scaleY = cropImage.height / canvas.offsetHeight;
         
-        const actualX = cropBox.x * scaleX;
-        const actualY = cropBox.y * scaleY;
-        const actualWidth = cropBox.width * scaleX;
-        const actualHeight = cropBox.height * scaleY;
+        const actualX = Math.round(cropBox.x * scaleX);
+        const actualY = Math.round(cropBox.y * scaleY);
+        const actualWidth = Math.round(cropBox.width * scaleX);
+        const actualHeight = Math.round(cropBox.height * scaleY);
         
         const croppedCanvas = document.createElement('canvas');
         const ctx = croppedCanvas.getContext('2d');
@@ -1514,8 +1571,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Clear form button handler
       const clearFormBtn = document.getElementById('clearFormBtn');
-      if (clearFormBtn) {
-        clearFormBtn.addEventListener('click', clearForm);
+      if (clearFormBtn) { clearFormBtn.addEventListener('click', clearForm); }
+
+      // Photo delete (X) button overlay
+      const photoDelete = document.getElementById('photoDelete');
+      if (photoDelete) {
+        photoDelete.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          clearForm();
+          // Also clear the file input files
+          try { photoInput.value = ''; } catch {}
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Photo removed', { type: 'info' }) : void 0;
+        });
       }
 
       // Location field click handler
@@ -1546,6 +1614,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordField = document.getElementById('passwordField');
     const mobileField = document.getElementById('mobileField');
 
+    // Helper: call backend to persist a field update
+    const saveProfileField = async (field, value) => {
+      try {
+        const fd = new FormData();
+        fd.append('field', field);
+        fd.append('value', value);
+        const r = await fetch('api/profile_update.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.success) {
+          throw new Error(data.message || 'Unable to save changes');
+        }
+        return data;
+      } catch (e) {
+        throw e;
+      }
+    };
+
     // Edit Password functionality
     if (editPasswordBtn && passwordField) {
       editPasswordBtn.addEventListener('click', () => {
@@ -1568,20 +1653,26 @@ document.addEventListener('DOMContentLoaded', () => {
           // Save changes
           const newPassword = passwordField.value.trim();
           if (newPassword.length >= 6) {
-            passwordField.readOnly = true;
-            passwordField.value = 'M*************';
-            passwordField.placeholder = '';
-            
-            // Change button back to edit
-            editPasswordBtn.innerHTML = `
-              <svg viewBox="0 0 24 24">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            `;
-            editPasswordBtn.title = 'Edit password';
-            
-            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password updated successfully!', { type: 'success' }) : alert('Password updated successfully!');
+            // Persist to backend
+            saveProfileField('password', newPassword)
+              .then(() => {
+                passwordField.readOnly = true;
+                passwordField.type = 'password';
+                passwordField.value = 'M*************';
+                passwordField.placeholder = '';
+                editPasswordBtn.innerHTML = `
+                  <svg viewBox="0 0 24 24">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                `;
+                editPasswordBtn.title = 'Edit password';
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password updated successfully!', { type: 'success' }) : alert('Password updated successfully!');
+              })
+              .catch((err) => {
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast(err.message || 'Failed to update password', { type: 'error' }) : alert(err.message || 'Failed to update password');
+                passwordField.focus();
+              });
           } else {
             (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password must be at least 6 characters long', { type: 'info' }) : alert('Password must be at least 6 characters long');
             passwordField.focus();
@@ -1609,21 +1700,26 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           // Save changes
           const newMobile = mobileField.value.trim();
-          if (newMobile.length >= 10 && newMobile.startsWith('+63')) {
-            mobileField.readOnly = true;
-            
-            // Change button back to edit
-            editMobileBtn.innerHTML = `
-              <svg viewBox="0 0 24 24">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            `;
-            editMobileBtn.title = 'Edit mobile number';
-            
-            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Mobile number updated successfully!', { type: 'success' }) : alert('Mobile number updated successfully!');
+          if (newMobile.length >= 10) {
+            saveProfileField('mobile', newMobile)
+              .then((data) => {
+                mobileField.readOnly = true;
+                if (data && data.value) mobileField.value = data.value;
+                editMobileBtn.innerHTML = `
+                  <svg viewBox=\"0 0 24 24\">
+                    <path d=\"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"></path>
+                    <path d=\"m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z\"></path>
+                  </svg>
+                `;
+                editMobileBtn.title = 'Edit mobile number';
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Mobile number updated successfully!', { type: 'success' }) : alert('Mobile number updated successfully!');
+              })
+              .catch((err) => {
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast(err.message || 'Failed to update mobile number', { type: 'error' }) : alert(err.message || 'Failed to update mobile number');
+                mobileField.focus();
+              });
           } else {
-            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a valid Philippine mobile number starting with +63', { type: 'info' }) : alert('Please enter a valid Philippine mobile number starting with +63');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a valid mobile number', { type: 'info' }) : alert('Please enter a valid mobile number');
             mobileField.focus();
           }
         }

@@ -42,7 +42,8 @@ if (is_logged_in()) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PROFILE - GO! MARIKINA</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <?php $cssVersion = @filemtime(__DIR__ . '/assets/css/style.css') ?: time(); ?>
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo $cssVersion; ?>">
 </head>
 <body>
     <div class="dashboard-layout">
@@ -54,12 +55,8 @@ if (is_logged_in()) {
 
         <!-- Main Content -->
         <main class="dashboard-main">
-            <header class="dashboard-header">
-                <div class="header-logo">
-                    <img src="./uploads/go_marikina_logo.png" alt="GO! MARIKINA" class="header-logo-img">
-                </div>
-                <h1 class="profile-title">PROFILE</h1>
-                <div class="dashboard-actions" aria-hidden="true"></div>
+            <header class="dashboard-header profile-header-centered">
+                <img src="./uploads/blue_smallgomarikina.png?v=<?php echo @filemtime(__DIR__ . '/uploads/blue_smallgomarikina.png') ?: time(); ?>" alt="GO! MARIKINA" class="profile-small-logo" />
             </header>
 
             <?php
@@ -71,12 +68,16 @@ if (is_logged_in()) {
             <!-- Profile Content -->
             <div id="profileContent">
                 <section class="profile-section">
-                    <div class="profile-card">
-                        <div class="profile-card-header">
-                            <h3>User Details</h3>
+                    <div class="profile-hero">
+                        <div class="profile-hero-head">
+                            <p class="profile-hero-kicker">USER PROFILE</p>
+                            <h2 class="profile-hero-title">Your profile</h2>
+                            <p class="profile-hero-subtitle">Manage your personal information and keep your contact details up to date.</p>
                         </div>
-                        <div class="profile-card-body">
-                            <div class="profile-info">
+                        <div class="profile-hero-inner">
+                          <div class="profile-card">
+                            <div class="profile-card-body">
+                              <div class="profile-info">
                                 <div class="profile-field">
                                     <label class="profile-label">Name</label>
                                     <input type="text" class="profile-input" 
@@ -115,13 +116,15 @@ if (is_logged_in()) {
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                        </div>
                 </section>
 
                 <div class="reports-summary">
-                    <h2>No. of Reports <?php echo (int)$reportCount; ?></h2>
+                    <h2>No. of Reports: <?php echo (int)$reportCount; ?></h2>
                 </div>
 
                 <div class="dividing-line"></div>
@@ -157,7 +160,8 @@ if (is_logged_in()) {
 
                                     $titleDisplay = htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8');
                                     $locationDisplay = htmlspecialchars($report['location'] ?? '', ENT_QUOTES, 'UTF-8');
-                                    $categoryDisplay = htmlspecialchars($report['category'] ?? 'Report', ENT_QUOTES, 'UTF-8');
+                                    $rawCategory = (string)($report['category'] ?? '');
+                                    $categoryDisplay = htmlspecialchars(category_label($rawCategory), ENT_QUOTES, 'UTF-8');
                                     $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                     $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
                                     $submittedAttr = htmlspecialchars(format_datetime_display($report['created_at'] ?? null), ENT_QUOTES, 'UTF-8');

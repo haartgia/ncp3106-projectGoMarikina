@@ -83,6 +83,50 @@ if (!function_exists('status_chip_modifier')) {
     }
 }
 
+if (!function_exists('category_label')) {
+    /**
+     * Convert stored category slugs like "public_safety" or "road-hazard"
+     * into a human-friendly label: "Public Safety", "Road Hazard".
+     */
+    function category_label(?string $category): string
+    {
+        if ($category === null) {
+            return 'Report';
+        }
+
+        $raw = trim((string)$category);
+        if ($raw === '') {
+            return 'Report';
+        }
+
+        // Normalize to slug-style key
+        $key = strtolower($raw);
+        $key = str_replace([' ', '-'], '_', $key);
+        $key = preg_replace('/_+/', '_', $key);
+
+        // Explicit mappings (authoritative display names)
+        $map = [
+            'public_safety'     => 'Public Safety & Infrastructure',
+            'cleanliness'       => 'Cleanliness & Environment',
+            'public_facilities' => 'Public Facilities',
+            'community'         => 'Community',
+            'other'             => 'Other Concerns',
+        ];
+
+        if (array_key_exists($key, $map)) {
+            return $map[$key];
+        }
+
+        // Fallback: make a best-effort pretty label
+        $s = str_replace(['_', '-'], ' ', $raw);
+        $s = preg_replace('/\s+/', ' ', $s);
+        if (function_exists('mb_convert_case')) {
+            return mb_convert_case($s, MB_CASE_TITLE, 'UTF-8');
+        }
+        return ucwords(strtolower($s));
+    }
+}
+
 if (!function_exists('user_initials')) {
     /**
      * Return initials from a user array or provided name components.

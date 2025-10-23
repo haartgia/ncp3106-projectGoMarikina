@@ -27,6 +27,24 @@ if ($title === '') $errors[] = 'Title is required';
 if ($description === '') $errors[] = 'Description is required';
 if ($location === '') $errors[] = 'Location is required';
 
+// Parse optional coordinates
+$latitude = null;
+$longitude = null;
+if (isset($_POST['location_lat']) && $_POST['location_lat'] !== '') {
+    if (is_numeric($_POST['location_lat'])) {
+        $latitude = (float) $_POST['location_lat'];
+    } else {
+        $errors[] = 'Invalid latitude value';
+    }
+}
+if (isset($_POST['location_lng']) && $_POST['location_lng'] !== '') {
+    if (is_numeric($_POST['location_lng'])) {
+        $longitude = (float) $_POST['location_lng'];
+    } else {
+        $errors[] = 'Invalid longitude value';
+    }
+}
+
 // Validate image (optional)
 $imagePath = null;
 $uploadDir = __DIR__ . '/../uploads/reports';
@@ -89,18 +107,19 @@ try {
     $hasUser = ($userId !== null);
     $hasImage = ($imagePath !== null);
 
+    // Include latitude/longitude columns (may be NULL)
     if ($hasUser && $hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('isssss', $userId, $title, $category, $description, $location, $imagePath);
+        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+        $stmt->bind_param('isssssdd', $userId, $title, $category, $description, $location, $imagePath, $latitude, $longitude);
     } elseif ($hasUser && !$hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('issss', $userId, $title, $category, $description, $location);
+        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+        $stmt->bind_param('issssdd', $userId, $title, $category, $description, $location, $latitude, $longitude);
     } elseif (!$hasUser && $hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('sssss', $title, $category, $description, $location, $imagePath);
+        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+        $stmt->bind_param('sssssdd', $title, $category, $description, $location, $imagePath, $latitude, $longitude);
     } else { // no user, no image
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('ssss', $title, $category, $description, $location);
+        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+        $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latitude, $longitude);
     }
     if (!$stmt->execute()) {
         throw new Exception($stmt->error);
@@ -120,6 +139,8 @@ try {
         'submitted_at' => $now,
         'summary' => $description,
         'image' => $imagePath,
+        'latitude' => $latitude !== null ? $latitude : null,
+        'longitude' => $longitude !== null ? $longitude : null,
         'tags' => [],
     ];
 

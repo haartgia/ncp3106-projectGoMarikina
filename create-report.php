@@ -91,6 +91,9 @@ require __DIR__ . '/config/auth.php';
                                 </svg>
                             </div>
                         </div>
+                        <!-- Hidden fields to store coordinates when a place is chosen -->
+                        <input type="hidden" id="location_lat" name="location_lat" value="">
+                        <input type="hidden" id="location_lng" name="location_lng" value="">
                     </div>
                     
                     <!-- Form Actions: span full width below both columns -->
@@ -131,6 +134,39 @@ require __DIR__ . '/config/auth.php';
         </div>
     </div>
             </div>
+
+        <!-- Map Picker Modal -->
+        <div id="mapModal" class="modal" aria-hidden="true">
+            <div class="modal-content map-modal-content" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <h2>Pick location</h2>
+                    <button type="button" class="modal-close" id="mapModalClose" aria-label="Close">×</button>
+                </div>
+                            <div class="modal-body">
+                        <div class="map-picker-wrap">
+                            <!-- Search input for Nominatim/LocationIQ autocomplete -->
+                            <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." style="margin:10px 12px;" />
+                            <!-- Leaflet map container -->
+                            <div id="reportMap" class="report-map" style="height:420px;"></div>
+                        <div id="infowindow-content" class="visually-hidden">
+                            <span id="place-name" data-key="place-name"></span>
+                            <span id="place-address" data-key="place-address"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                            <input type="checkbox" id="use-strict-bounds"> Use strict bounds
+                        </label>
+                    </div>
+                    <div class="map-footer-actions">
+                        <button type="button" id="mapClearSelection" class="btn-map-clear">CLEAR</button>
+                        <button type="button" id="mapUsePlace" class="btn-map-use">USE THIS PLACE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     <script src="assets/js/script.js" defer></script>
 </body>

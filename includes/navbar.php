@@ -131,3 +131,7 @@
     <img src="./uploads/small_go_marikina_logo.png" alt="Go Marikina logo" class="sidebar-logo">
   </div>
 </aside>
+<!-- Leaflet (OpenStreetMap) for map UI + Nominatim used in JS for geocoding/autocomplete -->
+<!-- CSS first so map renders with correct styles. Using unpkg CDN for Leaflet. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

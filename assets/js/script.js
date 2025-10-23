@@ -1156,6 +1156,24 @@ document.addEventListener('DOMContentLoaded', () => {
     setAuthMode(authCard.getAttribute('data-auth-mode') || 'login');
   }
 
+  // Client-side: validate signup password strength before submit
+  try {
+    const signupFormEl = document.querySelector('.auth-form-signup');
+    if (signupFormEl) {
+      signupFormEl.addEventListener('submit', (ev) => {
+        const pwd = signupFormEl.querySelector('#signupPassword');
+        if (!pwd) return; // nothing to validate
+        // pattern: at least 12 chars, uppercase, lowercase, digit and symbol
+        const strongRe = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/;
+        if (!strongRe.test(pwd.value || '')) {
+          ev.preventDefault();
+          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Password must be 12+ characters and include upper/lowercase letters, a number and a symbol.', { type: 'error', duration: 3500 });
+          pwd.focus();
+        }
+      });
+    }
+  } catch (err) { /* ignore JS errors */ }
+
   // Password visibility toggles ("spy" buttons) on auth forms.
   const passwordToggleButtons = Array.from(document.querySelectorAll('[data-password-toggle]'));
 
@@ -1179,10 +1197,45 @@ document.addEventListener('DOMContentLoaded', () => {
       // Initialize to the input's current type.
       setVisibility(input.type === 'text');
 
+      // toggle button click handler (kept inside the forEach)
       button.addEventListener('click', (event) => {
         event.preventDefault();
         const isVisible = button.dataset.visible === 'true';
         setVisibility(!isVisible);
+      });
+    });
+  }
+
+  // Numeric-only inputs: strip non-digit characters as the user types for inputs with data-numeric-only
+  const numericInputs = Array.from(document.querySelectorAll('input[data-numeric-only]'));
+  if (numericInputs.length) {
+    numericInputs.forEach((inp) => {
+      inp.addEventListener('input', (ev) => {
+        const old = inp.value;
+        const filtered = old.replace(/\D+/g, ''); // remove non-digits
+        if (old !== filtered) {
+          // preserve caret position as best effort
+          const pos = inp.selectionStart || filtered.length;
+          inp.value = filtered;
+          try { inp.setSelectionRange(pos - 1, pos - 1); } catch (e) { /* ignore */ }
+          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Only digits are allowed in the mobile number.', { type: 'error', duration: 2200 });
+        }
+      });
+      // Optionally prevent paste with non-digits
+      inp.addEventListener('paste', (e) => {
+        try {
+          const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+          if (/\D/.test(pasted)) {
+            e.preventDefault();
+            const digits = pasted.replace(/\D+/g, '');
+            // insert digits at cursor
+            const start = inp.selectionStart || 0;
+            const end = inp.selectionEnd || 0;
+            const val = inp.value;
+            inp.value = val.slice(0, start) + digits + val.slice(end);
+            if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Pasted content contained non-digits — only digits were kept.', { type: 'info', duration: 2200 });
+          }
+        } catch (err) { /* ignore */ }
       });
     });
   }
@@ -1599,6 +1652,395 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('Photo upload elements not found');
     }
   };
+
+  // Map / Place Picker integration for create-report page using Leaflet + Nominatim
+  async function initMapPlacePicker() {
+    const mapModal = document.getElementById('mapModal');
+    const mapModalClose = document.getElementById('mapModalClose');
+    const locationField = document.querySelector('.location-field');
+    const mapEl = document.getElementById('reportMap');
+    const placeInput = document.getElementById('leafletPlaceInput');
+    const usePlaceBtn = document.getElementById('mapUsePlace');
+    const clearBtn = document.getElementById('mapClearSelection');
+
+    if (!locationField || !mapEl) return;
+
+    let map = null;
+    let marker = null;
+    let chosenPlace = null;
+
+    // Initialize Leaflet map when modal opens (lazy init)
+    const ensureMap = () => {
+      if (map) return map;
+      try {
+  // Marikina bounding box (approx) - lat, lng pairs: [[south, west], [north, east]]
+  const marikinaBounds = L.latLngBounds([[14.57, 121.02], [14.76, 121.16]]);
+  // Initialize map centered in Marikina and restrict to Marikina bounds
+  map = L.map(mapEl).setView([14.650, 121.102], 13);
+  map.setMaxBounds(marikinaBounds);
+  map.options.maxBoundsViscosity = 0.95;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        marker = L.marker([14.65, 121.102], { draggable: true }).addTo(map);
+        marker.on('dragend', async () => {
+          const pos = marker.getLatLng();
+          // clamp marker to Marikina bounds if dragged outside
+          try {
+            if (typeof marikinaBounds !== 'undefined' && !marikinaBounds.contains(pos)) {
+              const clampedLat = Math.max(marikinaBounds.getSouth(), Math.min(marikinaBounds.getNorth(), pos.lat));
+              const clampedLng = Math.max(marikinaBounds.getWest(), Math.min(marikinaBounds.getEast(), pos.lng));
+              marker.setLatLng([clampedLat, clampedLng]);
+              // update pos to clamped value
+              pos.lat = clampedLat; pos.lng = clampedLng;
+            }
+          } catch (e) {}
+          const latIn = document.getElementById('location_lat');
+          const lngIn = document.getElementById('location_lng');
+          const locInput = document.getElementById('location');
+          if (latIn) latIn.value = pos.lat;
+          if (lngIn) lngIn.value = pos.lng;
+          // Reverse geocode and populate address
+          const rev = await nominatimReverse(pos.lat, pos.lng);
+          const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
+          if (locInput && display) locInput.value = display;
+          try { if (placeInput && display) placeInput.value = display; } catch (e) {}
+          try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+          try { chosenPlace = { lat: pos.lat, lon: pos.lng, display_name: display }; } catch (e) {}
+        });
+
+        // Clicking the map places the marker and reverse-geocodes
+        map.on('click', async (e) => {
+          try {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            // Prevent placing marker outside Marikina
+            try {
+              if (typeof marikinaBounds !== 'undefined' && !marikinaBounds.contains([lat, lon])) {
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please pick a location inside Marikina City.', { type: 'info' }) : alert('Please pick a location inside Marikina City.');
+                return;
+              }
+            } catch (e) {}
+            marker.setLatLng([lat, lon]);
+            const latIn = document.getElementById('location_lat');
+            const lngIn = document.getElementById('location_lng');
+            const locInput = document.getElementById('location');
+            if (latIn) latIn.value = lat;
+            if (lngIn) lngIn.value = lon;
+            const rev = await nominatimReverse(lat, lon);
+            const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
+            if (locInput && display) locInput.value = display;
+            try { if (placeInput && display) placeInput.value = display; } catch (e) {}
+            try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+            try { chosenPlace = { lat: lat, lon: lon, display_name: display }; } catch (e) {}
+          } catch (e) { /* ignore */ }
+        });
+      } catch (e) {
+        map = null; marker = null;
+      }
+      return map;
+    };
+
+    const openModal = () => {
+      if (!mapModal) return;
+      mapModal.setAttribute('open', '');
+      mapModal.style.display = 'flex';
+      document.body.classList.add('modal-open');
+      // create map if needed and invalidate size so tiles render
+      setTimeout(() => {
+        ensureMap();
+        try { map.invalidateSize(); } catch (e) {}
+        if (chosenPlace && marker) {
+          try { marker.setLatLng([chosenPlace.lat, chosenPlace.lon]); map.setView([chosenPlace.lat, chosenPlace.lon], 17); } catch (e) {}
+        }
+        // focus the place search input so users can type immediately
+        try { if (placeInput) { placeInput.focus(); placeInput.select && placeInput.select(); } } catch (e) {}
+      }, 50);
+    };
+
+    const closeModal = () => {
+      if (!mapModal) return;
+      mapModal.removeAttribute('open');
+      mapModal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    };
+
+    locationField.addEventListener('click', openModal);
+
+    mapModalClose?.addEventListener('click', closeModal);
+    mapModal.addEventListener('click', (ev) => { if (ev.target === mapModal) closeModal(); });
+
+    // Nominatim search helper (public) — consider swapping to LocationIQ if you have a token
+    const nominatimSearch = async (q) => {
+      // Include an email parameter per Nominatim usage policy so the service can contact you if needed.
+      const email = 'noreply@gomarikina.local';
+  // Marikina viewbox: left(lon)=121.02, top(lat)=14.76, right(lon)=121.16, bottom(lat)=14.57
+  const viewbox = '121.02,14.76,121.16,14.57';
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=1&limit=5&countrycodes=ph&viewbox=${encodeURIComponent(viewbox)}&bounded=1&email=${encodeURIComponent(email)}`;
+      // Retry a couple times for transient network or 429 issues
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.debug('nominatimSearch attempt', attempt, url);
+          const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+          if (!r.ok) {
+            console.warn('Nominatim search returned status', r.status);
+            // If it's a client error (4xx other than 429) don't retry
+            if (r.status >= 400 && r.status < 500 && r.status !== 429) return [];
+            // otherwise retry once
+            if (attempt === 2) return [];
+            await new Promise(res => setTimeout(res, 250 * attempt));
+            continue;
+          }
+          const body = await r.json().catch(() => null);
+          console.debug('nominatimSearch response', body);
+          return Array.isArray(body) ? body : [];
+        } catch (e) {
+          console.warn('Nominatim search error (attempt ' + attempt + ')', e);
+          if (attempt === 2) throw e;
+          await new Promise(res => setTimeout(res, 250 * attempt));
+        }
+      }
+      return [];
+    };
+
+    // Reverse geocode (lat,lng) to a display name using Nominatim
+    const nominatimReverse = async (lat, lon) => {
+      const email = 'noreply@gomarikina.local';
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&email=${encodeURIComponent(email)}`;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.debug('nominatimReverse attempt', attempt, url);
+          const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+          if (!r.ok) {
+            console.warn('Nominatim reverse returned status', r.status);
+            if (r.status >= 400 && r.status < 500 && r.status !== 429) return null;
+            if (attempt === 2) return null;
+            await new Promise(res => setTimeout(res, 250 * attempt));
+            continue;
+          }
+          const body = await r.json().catch(() => null);
+          console.debug('nominatimReverse response', body);
+          return body;
+        } catch (e) {
+          console.warn('Nominatim reverse error (attempt ' + attempt + ')', e);
+          if (attempt === 2) return null;
+          await new Promise(res => setTimeout(res, 250 * attempt));
+        }
+      }
+      return null;
+    };
+
+    // Simple autocomplete dropdown for the search input with keyboard support
+    const resultsListId = 'leafletPlaceResults';
+    const createResultsContainer = () => {
+      let list = document.getElementById(resultsListId);
+      if (!list) {
+        list = document.createElement('div');
+        list.id = resultsListId;
+        list.className = 'autocomplete-results';
+        // Append to body and position using viewport coordinates so the dropdown
+        // aligns correctly even when the input is inside a transformed/modal container.
+        list.style.position = 'absolute';
+        list.style.zIndex = 2000;
+        list.style.minWidth = (placeInput ? placeInput.offsetWidth : 240) + 'px';
+        list.style.boxSizing = 'border-box';
+        document.body.appendChild(list);
+      }
+      return list;
+    };
+
+    let activeIndex = -1;
+    const clearResults = () => {
+      const existing = document.getElementById(resultsListId);
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      activeIndex = -1;
+    };
+
+    const showResults = (items) => {
+  const list = createResultsContainer();
+  // position via bounding rect so it sits inside modal nicely. Use page scroll offsets
+  // so the dropdown is positioned correctly when appended to document.body.
+  const rect = placeInput.getBoundingClientRect();
+  const scrollX = window.scrollX || window.pageXOffset || 0;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+  list.style.left = (rect.left + scrollX) + 'px';
+  list.style.top = (rect.bottom + scrollY) + 'px';
+  list.style.width = rect.width + 'px';
+      list.innerHTML = '';
+
+      items.forEach((it, idx) => {
+        const el = document.createElement('div');
+        el.className = 'autocomplete-item';
+        el.dataset.index = idx;
+        el.textContent = it.display_name || `${it.name || ''} ${it.type || ''}`.trim();
+        el.style.padding = '8px 12px';
+        el.style.cursor = 'pointer';
+        el.tabIndex = 0;
+        el.addEventListener('click', () => selectResult(it));
+        el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') selectResult(it); });
+        list.appendChild(el);
+      });
+
+      if (!items.length) {
+        list.innerHTML = '<div style="padding:8px 12px;color:var(--text-muted);">No results</div>';
+      }
+    };
+
+    const selectResult = (it) => {
+      chosenPlace = it;
+      // set marker and inputs
+      ensureMap();
+      try {
+        marker.setLatLng([parseFloat(it.lat), parseFloat(it.lon)]);
+        map.setView([parseFloat(it.lat), parseFloat(it.lon)], 17);
+      } catch (e) {}
+      const latIn = document.getElementById('location_lat');
+      const lngIn = document.getElementById('location_lng');
+      const locInput = document.getElementById('location');
+      if (latIn) latIn.value = it.lat;
+      if (lngIn) lngIn.value = it.lon;
+      if (locInput) locInput.value = it.display_name || '';
+      try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+      clearResults();
+      placeInput.value = it.display_name || '';
+    };
+
+    let searchTimer = null;
+    if (placeInput) {
+      placeInput.addEventListener('input', (ev) => {
+        const q = (ev.target.value || '').trim();
+        if (searchTimer) clearTimeout(searchTimer);
+        if (!q) { clearResults(); return; }
+        searchTimer = setTimeout(async () => {
+          try {
+            const res = await nominatimSearch(q);
+            showResults(Array.isArray(res) ? res : []);
+          } catch (e) {
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Search failed — try again', { type: 'error' }) : console.warn(e);
+          }
+        }, 300);
+      });
+
+      // keyboard navigation
+      placeInput.addEventListener('keydown', (ev) => {
+        const list = document.getElementById(resultsListId);
+        const items = list ? Array.from(list.querySelectorAll('.autocomplete-item')) : [];
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          activeIndex = Math.min(activeIndex + 1, items.length - 1);
+          items.forEach((it, i) => it.classList.toggle('active', i === activeIndex));
+          items[activeIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          activeIndex = Math.max(activeIndex - 1, 0);
+          items.forEach((it, i) => it.classList.toggle('active', i === activeIndex));
+          items[activeIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (ev.key === 'Enter') {
+          ev.preventDefault();
+          if (items.length && activeIndex >= 0) {
+            items[activeIndex].click();
+          } else if (items.length && items[0]) {
+            items[0].click();
+          }
+        } else if (ev.key === 'Escape') {
+          clearResults();
+        }
+      });
+
+      // close results on outside click (take into account results appended to body)
+      document.addEventListener('click', (ev) => {
+        const list = document.getElementById(resultsListId);
+        if (!list) return;
+        if (ev.target === placeInput || list.contains(ev.target)) return;
+        clearResults();
+      });
+
+      // remove results on blur after a small delay to allow click to register
+      placeInput.addEventListener('blur', () => setTimeout(clearResults, 200));
+    }
+
+    // Use this place button copies the chosen place to the location input and closes modal
+    usePlaceBtn?.addEventListener('click', async () => {
+      const locInput = document.getElementById('location');
+      // If user didn't pick from suggestions but typed an address, attempt a search
+      if (!chosenPlace && placeInput && placeInput.value && placeInput.value.trim()) {
+        try {
+          const res = await nominatimSearch(placeInput.value.trim());
+          if (Array.isArray(res) && res.length > 0) {
+            chosenPlace = res[0];
+          }
+        } catch (e) {
+          console.warn('Use place fallback search failed', e);
+        }
+      }
+
+      // If still no chosenPlace, but a marker exists (user clicked/dragged), use its position
+      if (!chosenPlace && typeof marker !== 'undefined' && marker) {
+        try {
+          const pos = marker.getLatLng();
+          // ensure marker is within bounds if bounds exist
+          if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) {
+            const rev = await nominatimReverse(pos.lat, pos.lng);
+            const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
+            chosenPlace = { lat: pos.lat, lon: pos.lng, display_name: display };
+          }
+        } catch (e) {
+          console.warn('Use place reverse geocode failed', e);
+        }
+      }
+
+      // Last fallback: if locInput already has a string, use it without coords
+      if (!chosenPlace && locInput && locInput.value && locInput.value.trim()) {
+        chosenPlace = { lat: '', lon: '', display_name: locInput.value.trim() };
+      }
+
+      if (!chosenPlace) {
+        if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Please pick a place first.', { type: 'error' });
+        return;
+      }
+
+      if (locInput) locInput.value = chosenPlace.display_name || '';
+      const latIn = document.getElementById('location_lat');
+      const lngIn = document.getElementById('location_lng');
+      if (latIn) latIn.value = chosenPlace.lat || '';
+      if (lngIn) lngIn.value = chosenPlace.lon || '';
+      const evt = new Event('change', { bubbles: true }); locInput?.dispatchEvent(evt);
+      closeModal();
+    });
+
+    // Clear selection
+    clearBtn?.addEventListener('click', () => {
+      chosenPlace = null;
+      try { if (marker) marker.setLatLng([14.65, 120.97]); } catch (e) {}
+      const latIn = document.getElementById('location_lat');
+      const lngIn = document.getElementById('location_lng');
+      const locInput = document.getElementById('location');
+      if (latIn) latIn.value = '';
+      if (lngIn) lngIn.value = '';
+      if (locInput) locInput.value = '';
+      (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Selection cleared', { type: 'info' }) : void 0;
+    });
+
+  }
+
+  // Initialize the create report map picker if present
+  initMapPlacePicker().catch(() => {});
+
+  // Informational note if Leaflet doesn't load for some reason
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      if (typeof L === 'undefined') {
+        if (window.GOMK && window.GOMK.showToast) {
+          window.GOMK.showToast('Map services unavailable. Leaflet failed to load.', { type: 'error', duration: 8000 });
+        } else {
+          console.warn('Map services unavailable. Leaflet failed to load.');
+        }
+      }
+    } catch (e) { /* ignore errors in check */ }
+  });
 
   // Initialize create report functionality if on create-report page
   if (document.getElementById('createReportForm')) {

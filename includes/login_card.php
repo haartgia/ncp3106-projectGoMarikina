@@ -57,7 +57,8 @@ unset($_SESSION['login_error']);
 
 				<label class="auth-field" for="signupMobile">
 					<span class="auth-field-label">Mobile Number</span>
-					<input type="tel" id="signupMobile" name="mobile" placeholder="Mobile Number" required autocomplete="tel" />
+					<!-- Enforce numeric input client-side: pattern + maxlength for common mobile lengths; JS will filter non-digits -->
+					<input type="tel" id="signupMobile" name="mobile" placeholder="Mobile Number" required autocomplete="tel" pattern="[0-9]+" maxlength="15" inputmode="numeric" data-numeric-only />
 				</label>
 
 				<label class="auth-field" for="signupEmail">
@@ -68,7 +69,8 @@ unset($_SESSION['login_error']);
 				<label class="auth-field" for="signupPassword">
 					<span class="auth-field-label">Password</span>
 					<div class="auth-field-input">
-						<input type="password" id="signupPassword" name="password" placeholder="Password" required autocomplete="new-password" data-password-field />
+						<!-- Require strong password: min 12 chars, uppercase, lowercase, number, and symbol -->
+						<input type="password" id="signupPassword" name="password" placeholder="Password" required autocomplete="new-password" data-password-field minlength="12" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}" title="At least 12 characters, with uppercase, lowercase, number and symbol" />
 						<button type="button" class="auth-field-toggle" data-password-toggle="signupPassword" aria-label="Show password">
 							<span class="auth-toggle-icon" aria-hidden="true"></span>
 						</button>

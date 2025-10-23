@@ -20,6 +20,20 @@ if ($email === '' || $password === '' || $first_name === '' || $last_name === ''
     exit;
 }
 
+// Server-side: ensure mobile contains only digits (no letters/symbols)
+if (!preg_match('/^[0-9]+$/', $mobile)) {
+    $_SESSION['login_error'] = 'Mobile number must contain digits only.';
+    header('Location: profile.php');
+    exit;
+}
+
+// Server-side: validate password strength (min 12 chars, upper, lower, digit, symbol)
+if (!preg_match('/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/', $password)) {
+    $_SESSION['login_error'] = 'Password must be at least 12 characters and include uppercase, lowercase, a number, and a symbol.';
+    header('Location: profile.php');
+    exit;
+}
+
 $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);
 $stmt->execute();

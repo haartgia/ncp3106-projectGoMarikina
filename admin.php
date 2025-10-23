@@ -40,14 +40,26 @@ $feedback = $_SESSION['admin_feedback'] ?? null;
 unset($_SESSION['admin_feedback']);
 
 try {
-    $res = $conn->query('SELECT id, title, category, description, location, image_path, status, created_at FROM reports ORDER BY created_at DESC LIMIT 500');
+    // Join with users to show reporter name/email to admins when available
+    $sql = "SELECT r.id, r.title, r.category, r.description, r.location, r.image_path, r.status, r.created_at, r.user_id, u.first_name, u.last_name, u.email
+            FROM reports r
+            LEFT JOIN users u ON u.id = r.user_id
+            ORDER BY r.created_at DESC LIMIT 500";
+    $res = $conn->query($sql);
     if ($res) {
         while ($r = $res->fetch_assoc()) {
+            $reporter = 'Resident';
+            if (!empty($r['first_name']) || !empty($r['last_name'])) {
+                $reporter = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
+            } elseif (!empty($r['email'])) {
+                $reporter = $r['email'];
+            }
+
             $reports[] = [
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'category' => $r['category'],
-                'reporter' => 'Resident',
+                'reporter' => $reporter,
                 'location' => $r['location'],
                 'submitted_at' => $r['created_at'],
                 'summary' => $r['description'],

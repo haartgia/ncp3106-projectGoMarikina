@@ -164,3 +164,39 @@ if (!function_exists('user_initials')) {
     }
 }
 
+if (!function_exists('summarize_location')) {
+    /**
+     * Produce a short, human-friendly summary for long location strings.
+     * Strategy:
+     *  - Split on commas and keep the first N components (default 3).
+     *  - Trim and join with commas. If the result is still longer than
+     *    $maxLen, truncate with an ellipsis.
+     *  - If the original had more components than kept, append an ellipsis.
+     */
+    function summarize_location(?string $location, int $parts = 3, int $maxLen = 80): string
+    {
+        $location = trim((string)$location);
+        if ($location === '') {
+            return '';
+        }
+
+        $chunks = array_filter(array_map('trim', explode(',', $location)), fn($v) => $v !== '');
+        if (count($chunks) === 0) {
+            return $location;
+        }
+
+        $keep = array_slice($chunks, 0, max(1, $parts));
+        $out = implode(', ', $keep);
+
+        // Use multibyte-safe functions when available
+        $len = function_exists('mb_strlen') ? mb_strlen($out, 'UTF-8') : strlen($out);
+        if ($len > $maxLen) {
+            $out = (function_exists('mb_substr') ? mb_substr($out, 0, $maxLen - 1, 'UTF-8') : substr($out, 0, $maxLen - 1)) . '…';
+        } elseif (count($chunks) > count($keep)) {
+            $out .= '…';
+        }
+
+        return $out;
+    }
+}
+

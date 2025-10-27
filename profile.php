@@ -168,11 +168,25 @@ if (is_logged_in()) {
                                     $imageAttr = !empty($report['image_path']) ? htmlspecialchars($report['image_path'], ENT_QUOTES, 'UTF-8') : '';
                                     $summaryFull = htmlspecialchars((string)($report['description'] ?? ''), ENT_QUOTES, 'UTF-8');
 
-                                    $summaryLimit = 160;
+                                    // Shorter card preview: reduce to 40 characters and
+                                    // truncate at the last whole word so we don't cut mid-word.
+                                    $summaryLimit = 40;
                                     $rawSummary = (string)($report['description'] ?? '');
                                     $rawLen = function_exists('mb_strlen') ? mb_strlen($rawSummary, 'UTF-8') : strlen($rawSummary);
                                     if ($rawLen > $summaryLimit) {
-                                        $tr = function_exists('mb_substr') ? mb_substr($rawSummary, 0, $summaryLimit, 'UTF-8') : substr($rawSummary, 0, $summaryLimit);
+                                        if (function_exists('mb_substr') && function_exists('mb_strrpos')) {
+                                            $tr = mb_substr($rawSummary, 0, $summaryLimit, 'UTF-8');
+                                            $lastSpace = mb_strrpos($tr, ' ', 0, 'UTF-8');
+                                            if ($lastSpace !== false) {
+                                                $tr = mb_substr($tr, 0, $lastSpace, 'UTF-8');
+                                            }
+                                        } else {
+                                            $tr = substr($rawSummary, 0, $summaryLimit);
+                                            $lastSpace = strrpos($tr, ' ');
+                                            if ($lastSpace !== false) {
+                                                $tr = substr($tr, 0, $lastSpace);
+                                            }
+                                        }
                                         $summaryTrim = htmlspecialchars($tr . '…', ENT_QUOTES, 'UTF-8');
                                         $isTruncated = true;
                                     } else {
@@ -196,22 +210,23 @@ if (is_logged_in()) {
                                     <header class="report-card-header">
                                         <div class="report-author">
                                             <div class="author-avatar" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                                <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" role="presentation" focusable="false">
                                                     <circle cx="12" cy="8" r="4" />
                                                     <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
                                                 </svg>
                                             </div>
                                             <div>
                                                 <div class="report-title-row">
-                                                    <h3><?php echo $titleDisplay; ?></h3>
+                                                    <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleDisplay; ?></h3>
                                                     <span class="report-meta">Submitted <?php echo $submittedAttr; ?></span>
                                                 </div>
-                                                <p>
-                                                    <?php echo htmlspecialchars(($userRow['first_name'] ?? '').' '.($userRow['last_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
+                                                <p class="report-meta-row">
+                                                    <span class="report-reporter"><?php echo htmlspecialchars(($userRow['first_name'] ?? '').' '.($userRow['last_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
                                                     <?php if ($locationDisplay !== ''): ?>
-                                                        <span class="report-meta-separator" aria-hidden="true">•</span>
-                                                        <span class="report-location"><?php echo $locationDisplay; ?></span>
-                                                    <?php endif; ?>
+                                                            <span class="report-meta-separator" aria-hidden="true">•</span>
+                                                            <?php $locationShort = function_exists('summarize_location') ? summarize_location($locationDisplay, 3, 80) : $locationDisplay; ?>
+                                                            <span class="report-location" title="<?php echo htmlspecialchars($locationDisplay, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($locationShort, ENT_QUOTES, 'UTF-8'); ?></span>
+                                                        <?php endif; ?>
                                                 </p>
                                             </div>
                                         </div>
@@ -220,9 +235,12 @@ if (is_logged_in()) {
                                             <span class="chip chip-status <?php echo $statusModifierDisplay; ?>"><?php echo $statusLabelDisplay; ?></span>
                                         </div>
                                     </header>
-                                    <?php if ($summaryTrim !== ''): ?>
-                                        <p class="report-summary"><?php echo $summaryTrim; ?><?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?></p>
-                                    <?php endif; ?>
+                                            <?php if ($summaryTrim !== ''): ?>
+                                                <p class="report-summary" data-expanded="false">
+                                                    <span class="report-summary__text" title="<?php echo $summaryFull; ?>"><?php echo $summaryTrim; ?></span>
+                                                    <?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?>
+                                                </p>
+                                            <?php endif; ?>
                                     <?php if ($imageAttr !== ''): ?>
                                         <figure class="report-media aspect-8-4">
                                             <img src="<?php echo $imageAttr; ?>" alt="<?php echo $titleDisplay; ?> photo">

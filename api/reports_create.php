@@ -54,28 +54,42 @@ if (!is_dir($uploadDir)) {
     @mkdir($uploadDir, 0775, true);
 }
 
-if (!empty($_FILES['photo']) && is_uploaded_file($_FILES['photo']['tmp_name'])) {
+// Handle optional photo upload: only validate/process if user actually attempted an upload
+if (isset($_FILES['photo'])) {
     $file = $_FILES['photo'];
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'Photo upload failed';
+    // If no file was provided, ignore (optional)
+    if (isset($file['error']) && $file['error'] === UPLOAD_ERR_NO_FILE) {
+        // no-op; photo is optional
     } else {
-        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
-
-        if (!isset($allowed[$mime])) {
-            $errors[] = 'Unsupported image type. Please upload JPG, PNG, or WEBP.';
-        } else if ($file['size'] > 5 * 1024 * 1024) { // 5MB
-            $errors[] = 'Image is too large (max 5MB).';
-        } else {
-            $ext = $allowed[$mime];
-            $basename = bin2hex(random_bytes(8)) . '.' . $ext;
-            $target = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $basename;
-            if (!move_uploaded_file($file['tmp_name'], $target)) {
-                $errors[] = 'Failed to store uploaded image.';
+        // If tmp_name exists and is uploaded, process normally
+        if (!empty($file['tmp_name']) && is_uploaded_file($file['tmp_name'])) {
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                $errors[] = 'Photo upload failed';
             } else {
-                $imagePath = $publicBase . '/' . $basename;
+                $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mime = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+
+                if (!isset($allowed[$mime])) {
+                    $errors[] = 'Unsupported image type. Please upload JPG, PNG, or WEBP.';
+                } else if ($file['size'] > 5 * 1024 * 1024) { // 5MB
+                    $errors[] = 'Image is too large (max 5MB).';
+                } else {
+                    $ext = $allowed[$mime];
+                    $basename = bin2hex(random_bytes(8)) . '.' . $ext;
+                    $target = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $basename;
+                    if (!move_uploaded_file($file['tmp_name'], $target)) {
+                        $errors[] = 'Failed to store uploaded image.';
+                    } else {
+                        $imagePath = $publicBase . '/' . $basename;
+                    }
+                }
+            }
+        } else {
+            // If tmp_name not present but error not NO_FILE, report upload failed
+            if (isset($file['error']) && $file['error'] !== UPLOAD_ERR_NO_FILE) {
+                $errors[] = 'Photo upload failed';
             }
         }
     }
@@ -86,6 +100,10 @@ if ($errors) {
     echo json_encode(['success' => false, 'message' => implode('\n', $errors)]);
     exit;
 }
+
+// Photo is optional. If no image was uploaded we'll continue and store NULL in the
+// image_path column. The client-side now also treats photo as optional.
+// (Previously this endpoint enforced a photo and returned 422.)
 
 $user = current_user();
 $userId = null;

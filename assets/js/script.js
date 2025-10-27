@@ -332,6 +332,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     setNoResultsVisible(visibleCount === 0);
+    // If Masonry is active, relayout after filtering so items reposition correctly.
+    try {
+      if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
+        window.__gomkMasonry.layout();
+      }
+    } catch (e) { /* ignore */ }
   };
 
   // Toggle filter popover visibility.
@@ -397,6 +403,113 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   };
+
+  /* Masonry-like row-major layout (JS Masonry) to ensure expanding a card only
+     moves items beneath it, not the entire row. We enable Masonry at a
+     configurable breakpoint and destroy it for small screens so the native
+     responsive grid is used there. */
+  (function initMasonryResponsive(){
+    if (!reportsList) return;
+    const MASONRY_BREAKPOINT = 900; // px
+    let masonry = null;
+    let imagesLoadedLib = null;
+
+    const loadScript = (src) => new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) return resolve();
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+
+    const ensureLibs = async () => {
+      // imagesLoaded then Masonry (unpkg CDN)
+      if (typeof imagesLoaded === 'undefined') {
+        await loadScript('https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js');
+      }
+      if (typeof Masonry === 'undefined') {
+        await loadScript('https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js');
+      }
+      imagesLoadedLib = window.imagesLoaded;
+    };
+
+    const enable = async () => {
+      if (!reportsList) return;
+      if (masonry) return; // already enabled
+      try {
+        await ensureLibs();
+      } catch (e) {
+        // gracefully fail: keep grid layout
+        return;
+      }
+      // Compute sensible column width based on breakpoint and container width
+      const gap = parseInt(getComputedStyle(reportsList).gap || 24, 10) || 24;
+      const w = window.innerWidth || document.documentElement.clientWidth;
+      const cols = w >= 1280 ? 3 : (w >= 900 ? 2 : 1);
+      const containerWidth = Math.max(300, reportsList.clientWidth || reportsList.offsetWidth || document.documentElement.clientWidth);
+      const colWidth = Math.floor((containerWidth - gap * (cols - 1)) / cols);
+
+      // Ensure each card has an explicit width so Masonry can align columns
+      Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
+        c.style.width = colWidth + 'px';
+      });
+
+  // Mark container so CSS doesn't keep grid behavior interfering
+  reportsList.classList.add('gomk-masonry-active');
+
+  // Initialize Masonry with a numeric columnWidth
+      masonry = new Masonry(reportsList, {
+        itemSelector: '.report-card',
+        columnWidth: colWidth,
+        percentPosition: false,
+        gutter: gap
+      });
+      window.__gomkMasonry = masonry;
+
+      // Wait for images then layout
+      imagesLoadedLib(reportsList, () => masonry.layout());
+
+      // Observe mutations (cards show/hide) and relayout
+  const mo = new MutationObserver(() => masonry.layout());
+  // watch child changes and attribute changes (including data-expanded)
+  mo.observe(reportsList, { childList: true, subtree: true, attributes: true });
+      masonry.__gomkObserver = mo;
+    };
+
+    const disable = () => {
+      if (!masonry) return;
+      try {
+        if (masonry.__gomkObserver) masonry.__gomkObserver.disconnect();
+        masonry.destroy();
+      } catch (e) { /* ignore */ }
+      // remove inline widths we set
+      Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
+        c.style.removeProperty('width');
+      });
+      reportsList.classList.remove('gomk-masonry-active');
+      masonry = null;
+      window.__gomkMasonry = null;
+    };
+
+    // Responsive toggling
+    let resizeTimer = null;
+    const check = () => {
+      const w = window.innerWidth || document.documentElement.clientWidth;
+      if (w >= MASONRY_BREAKPOINT) {
+        enable();
+      } else {
+        disable();
+      }
+    };
+
+    check();
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(check, 150);
+    });
+  })();
 
   searchForm?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -566,6 +679,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Shared IntersectionObserver to only run location marquees when the
+    // card is visible in the viewport. This reduces CPU work for offscreen
+    // cards (especially when many are rendered).
+    const locationMarqueeObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const el = entry.target;
+        if (entry.isIntersecting) {
+          if (typeof el._startMarquee === 'function') el._startMarquee();
+        } else {
+          if (typeof el._stopMarquee === 'function') el._stopMarquee();
+        }
+      });
+    }, { threshold: 0.5 });
+
     reportCards.forEach((card) => {
       const handleOpen = (event) => {
         if (event.type === 'click' && event.target.closest('.icon-button')) {
@@ -600,21 +727,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const initInlineToggle = (p) => {
         if (!p) return;
+
+        // the visible text node we will toggle; prefer an explicit span if present
+        const textHolder = p.querySelector('.report-summary__text') || p;
+
         // Cache the collapsed text if not yet cached
         if (!p.dataset.collapsedText) {
           // Remove any trailing "See more/less" label from the current text
-          const txt = (p.textContent || '').replace(/\s*(See more|See less)\s*$/i, '').trim();
-          p.dataset.collapsedText = txt;
+          const source = (textHolder.textContent || '').replace(/\s*(See more|See less)\s*$/i, '').trim();
+          p.dataset.collapsedText = source;
         }
 
         const fullText = decodeEntities(card.dataset.summary || '');
 
         const setExpanded = (expand) => {
           p.dataset.expanded = expand ? 'true' : 'false';
-          // Reset text to either collapsed or full
-          p.textContent = expand ? fullText : (p.dataset.collapsedText || '');
 
-          // Append the appropriate action link
+          // Reset text to either collapsed or full
+          if (textHolder.classList && textHolder.classList.contains('report-summary__text')) {
+            textHolder.textContent = expand ? fullText : (p.dataset.collapsedText || '');
+          } else {
+            // textHolder is the paragraph itself
+            textHolder.textContent = expand ? fullText : (p.dataset.collapsedText || '');
+          }
+
+          // Remove any existing action link
+          const existing = p.querySelector('.report-see-more, .report-see-less');
+          if (existing) existing.remove();
+
+          // Append the appropriate action link after the text holder
           const link = document.createElement('a');
           link.href = '#';
           link.className = expand ? 'report-see-less' : 'report-see-more';
@@ -624,21 +765,167 @@ document.addEventListener('DOMContentLoaded', () => {
             ev.stopPropagation();
             setExpanded(!expand);
           });
+
           p.appendChild(link);
         };
 
-        // Initialize based on current presence of see-more link
+        // Decide whether we need a see-more toggle. Prefer server-rendered
+        // link, otherwise detect based on content length or visual overflow.
         const hasSeeMore = !!p.querySelector('.report-see-more');
-        if (hasSeeMore) {
+        const collapsed = p.dataset.collapsedText || '';
+        const needsToggle = () => {
+          // If full text is longer than the collapsed snapshot, we need a toggle.
+          if (fullText && fullText.length > collapsed.length) return true;
+          // Otherwise, check if the rendered text is visually overflowing its box.
+          try {
+            return textHolder.scrollHeight > textHolder.clientHeight + 1;
+          } catch (e) { return false; }
+        };
+
+        if (hasSeeMore || needsToggle()) {
           setExpanded(false);
-        } else {
-          // If card was rendered without truncation, do nothing.
         }
       };
 
       const summaryP = card.querySelector('.report-summary');
       if (summaryP) {
         initInlineToggle(summaryP);
+      }
+
+      // Marquee-like animated scrolling for overflowing location text.
+      const initLocationMarquee = (el) => {
+        if (!el) return;
+        if (el.dataset.marqueeInit) return;
+
+        // Wrap content in an inner span if not already done
+        let inner = el.querySelector('.report-location__inner');
+        if (!inner) {
+          inner = document.createElement('span');
+          inner.className = 'report-location__inner';
+          // move child nodes into inner
+          while (el.firstChild) {
+            inner.appendChild(el.firstChild);
+          }
+          el.appendChild(inner);
+        }
+
+  // Only enable marquee when there are more than 4 words. Use the full
+  // location (from the title attribute or dataset) for counting so that
+  // server-side shortening doesn't prevent animation on long original
+  // addresses.
+  const fullText = (el.getAttribute('title') || el.dataset.location || inner.textContent || '').trim();
+  const textForCount = fullText;
+        const wordCount = textForCount ? textForCount.split(/\s+/).filter(Boolean).length : 0;
+        if (wordCount <= 4) {
+          // mark as initialized so we don't try again
+          el.dataset.marqueeInit = '1';
+          return;
+        }
+
+        // Ensure parent has overflow hidden (CSS should already) and inline-block sizing
+        el.style.overflow = 'hidden';
+        el.style.position = 'relative';
+
+        // Per-element state and control functions
+        let running = false;
+
+        const run = () => {
+          if (running === true) return;
+          const parentW = el.clientWidth;
+          const innerW = inner.scrollWidth;
+          const distance = innerW - parentW;
+          if (!(distance > 2)) {
+            // nothing to scroll
+            return;
+          }
+
+          running = true;
+
+          // Speed: px per ms (lower = slower). Use 0.12 px/ms (~120px/sec).
+          const pxPerMs = 0.12;
+          const duration = Math.max(800, Math.round(distance / pxPerMs));
+
+          // Start animation to left
+          inner.style.transition = `transform ${duration}ms linear`;
+          inner.style.transform = `translateX(-${distance}px)`;
+
+          const onEnd = () => {
+            inner.removeEventListener('transitionend', onEnd);
+            // Pause 5s at the end
+            setTimeout(() => {
+              // reset instantly
+              inner.style.transition = 'none';
+              inner.style.transform = 'translateX(0)';
+              // force reflow then restart after short delay
+              // eslint-disable-next-line no-unused-expressions
+              inner.offsetHeight;
+              running = false;
+              setTimeout(() => {
+                if (el._isVisible) run();
+              }, 600);
+            }, 5000);
+          };
+
+          inner.addEventListener('transitionend', onEnd);
+        };
+
+        const startMarquee = () => {
+          el._isVisible = true;
+          // small delay so layout settles
+          setTimeout(() => run(), 120);
+        };
+
+        const stopMarquee = () => {
+          el._isVisible = false;
+          // Freeze current position by removing transition and keeping computed transform
+          const style = window.getComputedStyle(inner);
+          const matrix = style.transform || style.webkitTransform || '';
+          if (matrix && matrix !== 'none') {
+            const parts = matrix.match(/matrix\((.+)\)/);
+            let tx = 0;
+            if (parts && parts[1]) {
+              const nums = parts[1].split(',').map(s => parseFloat(s.trim()));
+              tx = nums.length >= 5 ? nums[4] : 0;
+            }
+            inner.style.transition = 'none';
+            inner.style.transform = `translateX(${tx}px)`;
+          } else {
+            inner.style.transition = 'none';
+          }
+          running = false;
+        };
+
+        // Pause/resume on hover
+        el.addEventListener('mouseenter', () => {
+          // treat hover as stop
+          stopMarquee();
+        });
+
+        el.addEventListener('mouseleave', () => {
+          // resume if visible
+          if (el._isVisible) {
+            // compute remaining and resume via startMarquee/run on next frame
+            setTimeout(() => run(), 60);
+          }
+        });
+
+        // expose controls for the shared observer
+        el._startMarquee = startMarquee;
+        el._stopMarquee = stopMarquee;
+
+        // mark as initialized and register with observer
+        el.dataset.marqueeInit = '1';
+        if (typeof locationMarqueeObserver !== 'undefined' && locationMarqueeObserver) {
+          locationMarqueeObserver.observe(el);
+        } else {
+          // fallback: run immediately
+          setTimeout(run, 300);
+        }
+      };
+
+      const loc = card.querySelector('.report-location');
+      if (loc) {
+        initLocationMarquee(loc);
       }
     });
   }
@@ -1584,8 +1871,21 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           // If user selected a photo but didn't confirm crop, ensure it's still uploaded
+          let hasPhotoFile = false;
           if ((!currentPhoto || (currentPhoto && typeof currentPhoto === 'string')) && selectedImageFile instanceof File) {
             formData.set('photo', selectedImageFile, selectedImageFile.name || 'photo.jpg');
+            hasPhotoFile = true;
+          }
+          // If formData already contains a File under 'photo', honor it
+          const pf = formData.get('photo');
+          if (pf instanceof File) hasPhotoFile = true;
+
+          // Photo is optional. Ensure we don't send an empty string for 'photo'
+          // (some browsers may include an empty value in FormData). If no valid
+          // File is present, remove the key so backend sees it as absent.
+          const pfFinal = formData.get('photo');
+          if (!(pfFinal instanceof File)) {
+            try { formData.delete('photo'); } catch (e) {}
           }
 
           // Submit to backend
@@ -1685,7 +1985,8 @@ document.addEventListener('DOMContentLoaded', () => {
           attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        marker = L.marker([14.65, 121.102], { draggable: true }).addTo(map);
+  marker = L.marker([14.65, 121.102], { draggable: true }).addTo(map);
+  try { marker.bindPopup('Drag or click to set location'); } catch (e) {}
         marker.on('dragend', async () => {
           const pos = marker.getLatLng();
           // clamp marker to Marikina bounds if dragged outside
@@ -1709,6 +2010,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (locInput && display) locInput.value = display;
           try { if (placeInput && display) placeInput.value = display; } catch (e) {}
           try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+          try { if (display) marker.bindPopup(display).openPopup(); } catch (e) {}
           try { chosenPlace = { lat: pos.lat, lon: pos.lng, display_name: display }; } catch (e) {}
         });
 
@@ -1735,6 +2037,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (locInput && display) locInput.value = display;
             try { if (placeInput && display) placeInput.value = display; } catch (e) {}
             try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+            try { if (display) marker.bindPopup(display).openPopup(); } catch (e) {}
             try { chosenPlace = { lat: lat, lon: lon, display_name: display }; } catch (e) {}
           } catch (e) { /* ignore */ }
         });
@@ -1749,16 +2052,26 @@ document.addEventListener('DOMContentLoaded', () => {
       mapModal.setAttribute('open', '');
       mapModal.style.display = 'flex';
       document.body.classList.add('modal-open');
-      // create map if needed and invalidate size so tiles render
+      // create map if needed and invalidate size so tiles render. Call invalidateSize
+      // twice (immediately and again after a short delay) to handle cases where the
+      // modal or its animations cause the map container to be measured with 0 size
+      // initially. This is a minimal change to ensure the map appears promptly.
       setTimeout(() => {
         ensureMap();
-        try { map.invalidateSize(); } catch (e) {}
+        try {
+          if (map && typeof map.invalidateSize === 'function') {
+            // force immediate reflow of tiles
+            map.invalidateSize(true);
+            // schedule a second invalidate to catch any late layout/transition changes
+            setTimeout(() => { try { map.invalidateSize(true); } catch (e) {} }, 250);
+          }
+        } catch (e) {}
         if (chosenPlace && marker) {
           try { marker.setLatLng([chosenPlace.lat, chosenPlace.lon]); map.setView([chosenPlace.lat, chosenPlace.lon], 17); } catch (e) {}
         }
         // focus the place search input so users can type immediately
         try { if (placeInput) { placeInput.focus(); placeInput.select && placeInput.select(); } } catch (e) {}
-      }, 50);
+      }, 80);
     };
 
     const closeModal = () => {
@@ -1900,10 +2213,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const latIn = document.getElementById('location_lat');
       const lngIn = document.getElementById('location_lng');
       const locInput = document.getElementById('location');
-      if (latIn) latIn.value = it.lat;
-      if (lngIn) lngIn.value = it.lon;
-      if (locInput) locInput.value = it.display_name || '';
-      try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+  if (latIn) latIn.value = it.lat;
+  if (lngIn) lngIn.value = it.lon;
+  if (locInput) locInput.value = it.display_name || '';
+  try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
+  try { if (it.display_name) marker.bindPopup(it.display_name).openPopup(); } catch (e) {}
       clearResults();
       placeInput.value = it.display_name || '';
     };
@@ -2364,11 +2678,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // If we arrived with a hash (e.g., index.php#reports), re-apply a smooth scroll
-    if (window.location.hash) {
-      const target = getTarget(window.location.hash);
-      if (target) {
-        requestAnimationFrame(() => smoothScrollTo(target));
+      if (window.location.hash) {
+        const target = getTarget(window.location.hash);
+        if (target) {
+          requestAnimationFrame(() => smoothScrollTo(target));
+        }
       }
-    }
-  })();
-});
+    })();
+
+    
+  });

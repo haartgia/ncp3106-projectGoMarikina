@@ -23,6 +23,9 @@
   --sidebar-collapsed-width: 88px;
   --transition: 280ms cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-collapse-delay: 180ms;
+  /* Baseline card height used across the UI (desktop and tablet).
+     Cards can still grow taller if their content requires it. */
+  --card-baseline-height: 380px;
 }
 
 * {
@@ -166,9 +169,24 @@ body.modal-open {
   box-shadow: 0 18px 48px rgba(10,20,50,0.18);
 }
 
-.map-picker-wrap { display:flex; flex-direction:column; gap:8px; padding:12px 16px 8px 16px; }
+/* Ensure the map modal centers on screen and stays nicely constrained */
+.modal[open] {
+  align-items: center; /* vertically center modal content */
+}
+.map-modal-content {
+  margin: 0 auto; /* center horizontally */
+  max-width: 960px;
+  width: calc(100% - 48px);
+}
+
+.map-picker-wrap { display:flex; flex-direction:column; gap:8px; padding:12px 16px 8px 16px; align-items: center; }
 .place-picker { padding:12px; }
-.report-map { width:100%; border-radius:8px; overflow:hidden; }
+.report-map { width:100%; max-width:920px; border-radius:8px; /* allow popups to overflow the map container */ overflow: visible; margin: 0 auto; }
+
+/* Center the search input inside the modal and limit its max width */
+#leafletPlaceInput { width: 92%; max-width: 900px; }
+/* Ensure Leaflet popups appear above modal content */
+.leaflet-container .leaflet-popup-pane { z-index: 2200; }
 .modal-footer { padding:18px; border-top: none; background: transparent; display:flex; gap:12px; align-items:center; justify-content:space-between; }
 
 /* Autocomplete dropdown for Leaflet place search (Nominatim results) */
@@ -1180,10 +1198,25 @@ body.nav-open .sidebar-logo {
   display: grid;
   gap: 20px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: stretch;
+  /* prevent grid items from stretching to the same height
+     so each card can grow independently when its content is longer */
+  align-items: start;
+  /* ensure rows size to content by default */
+  grid-auto-rows: auto;
   padding: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+/* When Masonry (JS) is active we'll add a helper class to switch the
+   container to block layout so Masonry can position children via absolute
+   positioning without the grid interfering. The script will add/remove
+   `gomk-masonry-active` on the `.reports-list` element. */
+.reports-list.gomk-masonry-active {
+  display: block;
+}
+.reports-list.gomk-masonry-active .report-card {
+  margin-bottom: 24px; /* space between stacked cards when Masonry is active */
 }
 
 @media (max-width: 520px) {
@@ -1225,6 +1258,7 @@ body.nav-open .sidebar-logo {
   }
 }
 
+
 /* Individual report cards */
 .report-card {
   background: var(--surface);
@@ -1236,9 +1270,31 @@ body.nav-open .sidebar-logo {
   flex-direction: column;
   gap: 16px;
   transition: transform var(--transition), box-shadow var(--transition);
-  height: 100%;
+  /* Remove fixed 100% height so cards size to their own content.
+     Keep a gentle minimum so very small cards still look balanced. */
+  align-self: start;
+  min-height: 140px;
   cursor: pointer;
   background: #f8f9fc;
+}
+
+/* Optional: allow a controlled max-height for cards while keeping their
+   width fluid. Consumers can set the CSS variable `--report-card-max-height`
+   on a parent container (e.g., `.reports-list`) or on individual cards.
+   When set, the card will constrain its height and enable internal
+   scrolling if content overflows. Defaults preserve current behavior. */
+.report-card {
+  max-height: var(--report-card-max-height, none);
+  overflow: var(--report-card-overflow, visible);
+}
+
+/* Utility to enable a fixed card height with internal scrolling.
+   Usage: add `.card-fixed-height` to the parent container (applies to
+   all direct .report-card children via cascade) or to individual cards.
+   Example: <div class="reports-list card-fixed-height" style="--report-card-max-height:360px"> */
+.card-fixed-height {
+  --report-card-max-height: 360px; /* default height; override inline or in media queries */
+  --report-card-overflow: auto;    /* enable scrolling inside the card */
 }
 
 .report-card {
@@ -1251,7 +1307,9 @@ body.nav-open .sidebar-logo {
   flex-direction: column;
   gap: 16px;
   transition: transform var(--transition), box-shadow var(--transition);
-  height: 100%;
+  /* Avoid forcing equal heights across a row */
+  align-self: start;
+  min-height: 140px;
   cursor: pointer;
   width: 100%;
   box-sizing: border-box;
@@ -1339,6 +1397,21 @@ body.nav-open .sidebar-logo {
     display: block;
   }
 
+  /* Clamp the report title to 2 lines so long titles don't push the card
+     height too much. Use webkit-line-clamp with a standard line-clamp fall
+     back. Keep overflow hidden and show an ellipsis. */
+  .report-title-row h3 {
+    margin: 0 0 4px 0;
+    /* Single-line ellipsis for very long titles */
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.125rem; /* keep heading prominent but compact */
+    line-height: 1.15;
+    font-weight: 700;
+  }
+
   .author-avatar {
     width: 44px;
     height: 44px;
@@ -1395,6 +1468,46 @@ body.nav-open .sidebar-logo {
 .report-location {
   color: #64748b;
   font-size: 0.875rem;
+  /* As a flex item, allow it to take remaining width and be truncated
+     when necessary. The inner span (.report-location__inner) stays
+     inline-block for correct scrollWidth measurements used by JS. */
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;      /* keep on one line */
+  overflow: hidden;        /* clip overflow */
+  text-overflow: ellipsis; /* show trailing ... */
+}
+
+/* Make the metadata row a flexible inline layout so reporter and location
+   can be truncated independently. */
+.report-meta-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0; /* allow children to shrink below their content width */
+}
+
+.report-reporter {
+  color: #1a1f36;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto; /* allow reporter to shrink but prefer its intrinsic width */
+}
+
+.report-meta-separator {
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+/* Inner wrapper used for animated scrolling when the text overflows the
+   container. Kept inline-block so width measurements are consistent. */
+.report-location__inner {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .report-header-actions {
@@ -1406,6 +1519,33 @@ body.nav-open .sidebar-logo {
   font-size: 0.9375rem;
   line-height: 1.5;
   margin-top: 4px;
+}
+
+/* Show only one line of summary by default; when expanded (data-expanded="true")
+   the clamp is removed to show full text. This keeps the card preview short.
+*/
+.report-summary .report-summary__text {
+  /* keep the summary very compact: one muted line with ellipsis */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap; /* ensure a single line */
+  font-size: 0.875rem;
+  color: #6b7280; /* muted gray */
+  margin: 6px 0 0 0;
+}
+
+.report-summary[data-expanded="true"] .report-summary__text {
+  display: inline-block;
+  line-clamp: unset;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+  max-width: 100%;
 }
 
 .chip {
@@ -1470,9 +1610,14 @@ body.nav-open .sidebar-logo {
 }
 
 .author-avatar svg {
-  width: 28px;
-  height: 28px;
-  stroke: var(--sidebar-bg);
+  /* Enforce a fixed icon size inside the avatar. Use !important to override
+     any inline width/height attributes that may be present on the SVG markup.
+     vector-effect keeps stroke thickness consistent when scaling. */
+  width: 28px !important;
+  height: 28px !important;
+  display: block !important;
+  stroke: var(--sidebar-bg) !important;
+  vector-effect: non-scaling-stroke !important;
 }
 
 .report-author h3 {
@@ -1582,6 +1727,32 @@ body.nav-open .sidebar-logo {
   overflow-wrap: anywhere; /* modern, best-effort breaking */
   word-break: break-word;  /* legacy fallback */
   hyphens: auto;
+}
+
+/* Apply a consistent baseline height to the main card types (desktop and tablet).
+   They will still expand if their content is larger than the baseline. */
+@media (min-width: 640px) {
+  .report-card,
+  .public-announcement-card,
+  .modal-announcement-item,
+  .profile-card,
+  .city-metric-card,
+  .auth-card {
+    min-height: var(--card-baseline-height);
+    align-self: start; /* don't stretch to match neighbors */
+  }
+
+  /* Ensure media inside cards is cropped consistently so a large image doesn't
+     make the card overflow disproportionately. */
+  .report-media img,
+  .public-announcement-card__media img,
+  .modal-announcement-image {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    display: block;
+    border-radius: 12px;
+  }
 }
 
 /* See more link styling inside card summaries */

@@ -233,13 +233,27 @@ try {
                                 $rawSummary = (string)($report['summary'] ?? '');
                                 $summaryDisplayFull = htmlspecialchars($rawSummary, ENT_QUOTES, 'UTF-8');
                                 // Truncated summary for card
-                                $summaryLimit = 160;
+                                // Shorter card preview: reduce to 40 characters and
+                                // truncate at the last whole word so we don't cut mid-word.
+                                $summaryLimit = 40;
                                 $rawLen = function_exists('mb_strlen') ? mb_strlen($rawSummary, 'UTF-8') : strlen($rawSummary);
                                 $isTruncated = $rawLen > $summaryLimit;
                                 if ($isTruncated) {
-                                    $truncRaw = function_exists('mb_substr') ? mb_substr($rawSummary, 0, $summaryLimit, 'UTF-8') : substr($rawSummary, 0, $summaryLimit);
-                                    $truncRaw .= '…';
-                                    $summaryTrimDisplay = htmlspecialchars($truncRaw, ENT_QUOTES, 'UTF-8');
+                                    if (function_exists('mb_substr') && function_exists('mb_strrpos')) {
+                                        $tr = mb_substr($rawSummary, 0, $summaryLimit, 'UTF-8');
+                                        $lastSpace = mb_strrpos($tr, ' ', 0, 'UTF-8');
+                                        if ($lastSpace !== false) {
+                                            $tr = mb_substr($tr, 0, $lastSpace, 'UTF-8');
+                                        }
+                                    } else {
+                                        $tr = substr($rawSummary, 0, $summaryLimit);
+                                        $lastSpace = strrpos($tr, ' ');
+                                        if ($lastSpace !== false) {
+                                            $tr = substr($tr, 0, $lastSpace);
+                                        }
+                                    }
+                                    $tr .= '…';
+                                    $summaryTrimDisplay = htmlspecialchars($tr, ENT_QUOTES, 'UTF-8');
                                 } else {
                                     $summaryTrimDisplay = $summaryDisplayFull;
                                 }
@@ -272,21 +286,25 @@ try {
                                 <header class="report-card-header">
                                     <div class="report-author">
                                         <div class="author-avatar" aria-hidden="true">
-                                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                            <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" role="presentation" focusable="false">
                                                 <circle cx="12" cy="8" r="4" />
                                                 <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
                                             </svg>
                                         </div>
                                         <div>
                                             <div class="report-title-row">
-                                                <h3><?php echo $titleDisplay; ?></h3>
+                                                <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleDisplay; ?></h3>
                                                 <span class="report-meta">Submitted <?php echo $submittedAttr; ?></span>
                                             </div>
-                                            <p>
-                                                <?php echo $reporterDisplay; ?>
+                                            <p class="report-meta-row">
+                                                <span class="report-reporter"><?php echo $reporterDisplay; ?></span>
                                                 <?php if ($locationDisplay !== ''): ?>
                                                     <span class="report-meta-separator" aria-hidden="true">•</span>
-                                                    <span class="report-location"><?php echo $locationDisplay; ?></span>
+                                                    <?php
+                                                        // Show a summarized location in the card, keep full in title
+                                                        $locationShort = function_exists('summarize_location') ? summarize_location($locationDisplay, 3, 80) : $locationDisplay;
+                                                    ?>
+                                                    <span class="report-location" title="<?php echo htmlspecialchars($locationDisplay, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($locationShort, ENT_QUOTES, 'UTF-8'); ?></span>
                                                 <?php endif; ?>
                                             </p>
                                         </div>
@@ -309,7 +327,10 @@ try {
                                     </div>
                                 </header>
                                 <?php if ($summaryTrimDisplay !== ''): ?>
-                                    <p class="report-summary"><?php echo $summaryTrimDisplay; ?><?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?></p>
+                                    <p class="report-summary" data-expanded="false">
+                                        <span class="report-summary__text" title="<?php echo $summaryDisplayFull; ?>"><?php echo $summaryTrimDisplay; ?></span>
+                                        <?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?>
+                                    </p>
                                 <?php endif; ?>
                                 <?php if ($imageAttr !== ''): ?>
                                     <figure class="report-media aspect-8-4">

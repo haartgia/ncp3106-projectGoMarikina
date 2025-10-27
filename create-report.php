@@ -9,6 +9,8 @@ require __DIR__ . '/config/auth.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Report - GO! MARIKINA</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <!-- Leaflet CSS (loaded only on create-report page where map picker is used) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </head>
 <body>
     <div class="dashboard-layout">
@@ -46,6 +48,7 @@ require __DIR__ . '/config/auth.php';
                             </div>
                             <div class="upload-text">Upload Photo</div>
                             <div class="upload-hint">Click or drag to upload</div>
+                            
                             <img class="photo-preview" id="photoPreview" alt="Preview">
                             <button type="button" class="photo-delete" id="photoDelete" aria-label="Remove photo" title="Remove photo">×</button>
                         </div>
@@ -156,9 +159,7 @@ require __DIR__ . '/config/auth.php';
                 </div>
                 <div class="modal-footer">
                     <div style="display:flex;align-items:center;gap:12px;">
-                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-                            <input type="checkbox" id="use-strict-bounds"> Use strict bounds
-                        </label>
+                        <!-- 'Use strict bounds' removed per UI request -->
                     </div>
                     <div class="map-footer-actions">
                         <button type="button" id="mapClearSelection" class="btn-map-clear">CLEAR</button>
@@ -168,6 +169,8 @@ require __DIR__ . '/config/auth.php';
             </div>
         </div>
 
+    <!-- Leaflet JS (must load before the app script that uses it) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="assets/js/script.js" defer></script>
 </body>
 </html>

@@ -334,7 +334,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setNoResultsVisible(visibleCount === 0);
     // If Masonry is active, relayout after filtering so items reposition correctly.
     try {
-      if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
+      if (typeof window.__gomkScheduleMasonryLayout === 'function') {
+        window.__gomkScheduleMasonryLayout();
+      } else if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
         window.__gomkMasonry.layout();
       }
     } catch (e) { /* ignore */ }
@@ -410,7 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
      responsive grid is used there. */
   (function initMasonryResponsive(){
     if (!reportsList) return;
-    const MASONRY_BREAKPOINT = 900; // px
+  const DESIRED_COLS = 3; // always try to keep 3 columns
+  const MIN_CARD_WIDTH = 210; // allow a bit narrower to avoid dropping to 2 cols
+  const WIDTH_FUDGE = 24; // extra slack so scrollbars/rounding don't drop a column
     let masonry = null;
     let imagesLoadedLib = null;
 
@@ -444,17 +448,32 @@ document.addEventListener('DOMContentLoaded', () => {
         // gracefully fail: keep grid layout
         return;
       }
-      // Compute sensible column width based on breakpoint and container width
-      const gap = parseInt(getComputedStyle(reportsList).gap || 24, 10) || 24;
-      const w = window.innerWidth || document.documentElement.clientWidth;
-      const cols = w >= 1280 ? 3 : (w >= 900 ? 2 : 1);
-      const containerWidth = Math.max(300, reportsList.clientWidth || reportsList.offsetWidth || document.documentElement.clientWidth);
-      const colWidth = Math.floor((containerWidth - gap * (cols - 1)) / cols);
+      // Helpers to compute and apply a near-3-column layout with min width
+      const computeColMetrics = () => {
+        const gap = parseInt(getComputedStyle(reportsList).gap || 24, 10) || 24;
+        const containerWidth = Math.max(320, reportsList.clientWidth || reportsList.offsetWidth || document.documentElement.clientWidth);
+        // Try desired 3 columns, fallback to 2/1 if cards would get too narrow
+        let cols = DESIRED_COLS;
+        const widthFor = (c) => Math.floor(((containerWidth - WIDTH_FUDGE) - gap * (c - 1)) / c);
+        let colWidth = widthFor(cols);
+        while (cols > 1 && colWidth < MIN_CARD_WIDTH) {
+          cols -= 1;
+          colWidth = widthFor(cols);
+        }
+        return { cols, colWidth, gap };
+      };
 
-      // Ensure each card has an explicit width so Masonry can align columns
-      Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
-        c.style.width = colWidth + 'px';
-      });
+      const applyColMetrics = ({ colWidth }) => {
+        Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
+          c.style.width = colWidth + 'px';
+        });
+        if (masonry) {
+          masonry.options.columnWidth = colWidth;
+        }
+      };
+
+      const metrics = computeColMetrics();
+      applyColMetrics(metrics);
 
   // Mark container so CSS doesn't keep grid behavior interfering
   reportsList.classList.add('gomk-masonry-active');
@@ -462,26 +481,58 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize Masonry with a numeric columnWidth
       masonry = new Masonry(reportsList, {
         itemSelector: '.report-card',
-        columnWidth: colWidth,
+        columnWidth: metrics.colWidth,
         percentPosition: false,
-        gutter: gap
+        gutter: metrics.gap,
+        horizontalOrder: true,
+        transitionDuration: 0
       });
       window.__gomkMasonry = masonry;
 
-      // Wait for images then layout
-      imagesLoadedLib(reportsList, () => masonry.layout());
+      // Debounced/scheduled layout helper to avoid layout thrash
+      let layoutScheduled = false;
+      const scheduleLayout = () => {
+        if (!masonry) return;
+        if (layoutScheduled) return;
+        layoutScheduled = true;
+        requestAnimationFrame(() => {
+          layoutScheduled = false;
+          try { masonry.layout(); } catch (e) { /* ignore */ }
+        });
+      };
+      // expose for other modules (filters, see-more, etc.)
+      window.__gomkScheduleMasonryLayout = scheduleLayout;
+      // expose a recompute helper for resize
+      window.__gomkRecomputeMasonryCols = () => {
+        if (!masonry) return;
+        const m = computeColMetrics();
+        applyColMetrics(m);
+        scheduleLayout();
+      };
 
-      // Observe mutations (cards show/hide) and relayout
-  const mo = new MutationObserver(() => masonry.layout());
-  // watch child changes and attribute changes (including data-expanded)
-  mo.observe(reportsList, { childList: true, subtree: true, attributes: true });
+      // Wait for images then layout (scheduled)
+      imagesLoadedLib(reportsList, () => scheduleLayout());
+
+      // Observe mutations (cards show/hide) and schedule relayout.
+      // IMPORTANT: do NOT observe attributes to avoid loops from Masonry's own
+      // inline style updates during layout.
+      const mo = new MutationObserver(() => scheduleLayout());
+      mo.observe(reportsList, { childList: true, subtree: true });
       masonry.__gomkObserver = mo;
+
+      // Also observe size changes of individual cards (e.g., See more expand)
+      try {
+        const ro = new ResizeObserver(() => scheduleLayout());
+        Array.from(reportsList.querySelectorAll('.report-card')).forEach((el) => ro.observe(el));
+        masonry.__gomkResizeObserver = ro;
+      } catch (e) { /* ResizeObserver may be unavailable in very old browsers */ }
     };
 
     const disable = () => {
       if (!masonry) return;
       try {
         if (masonry.__gomkObserver) masonry.__gomkObserver.disconnect();
+        if (masonry.__gomkResizeObserver) masonry.__gomkResizeObserver.disconnect();
         masonry.destroy();
       } catch (e) { /* ignore */ }
       // remove inline widths we set
@@ -491,17 +542,19 @@ document.addEventListener('DOMContentLoaded', () => {
       reportsList.classList.remove('gomk-masonry-active');
       masonry = null;
       window.__gomkMasonry = null;
+      try { delete window.__gomkScheduleMasonryLayout; } catch (e) {}
     };
 
     // Responsive toggling
     let resizeTimer = null;
     const check = () => {
-      const w = window.innerWidth || document.documentElement.clientWidth;
-      if (w >= MASONRY_BREAKPOINT) {
-        enable();
-      } else {
-        disable();
-      }
+      // Always enable Masonry and recompute columns on resize
+      enable();
+      try {
+        if (typeof window.__gomkRecomputeMasonryCols === 'function') {
+          window.__gomkRecomputeMasonryCols();
+        }
+      } catch (e) { /* ignore */ }
     };
 
     check();
@@ -767,6 +820,15 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           p.appendChild(link);
+
+          // Reflow Masonry once after DOM/text changes to avoid jank/freezes
+          try {
+            if (typeof window.__gomkScheduleMasonryLayout === 'function') {
+              window.__gomkScheduleMasonryLayout();
+            } else if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
+              window.__gomkMasonry.layout();
+            }
+          } catch (e) { /* ignore */ }
         };
 
         // Decide whether we need a see-more toggle. Prefer server-rendered
@@ -1447,15 +1509,68 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     const signupFormEl = document.querySelector('.auth-form-signup');
     if (signupFormEl) {
+      const mobileInput = signupFormEl.querySelector('#signupMobile');
+      const emailInput = signupFormEl.querySelector('#signupEmail');
+      const pwd = signupFormEl.querySelector('#signupPassword');
+
+      // Mobile: enforce +63 prefix, max 10 digits after, no spaces
+      if (mobileInput) {
+        const ensurePrefix = () => {
+          let v = mobileInput.value || '';
+          // Remove spaces
+          v = v.replace(/\s+/g, '');
+          if (!v.startsWith('+63')) v = '+63' + v.replace(/^[+]*(63)?/, '');
+          // Keep only digits after prefix and clamp to 10 digits
+          const rest = v.slice(3).replace(/\D+/g, '').slice(0, 10);
+          mobileInput.value = '+63' + rest;
+        };
+        // Initialize on focus/blur/input
+        mobileInput.addEventListener('focus', () => { if (!mobileInput.value) mobileInput.value = '+63'; });
+        mobileInput.addEventListener('input', ensurePrefix);
+        mobileInput.addEventListener('blur', ensurePrefix);
+        // Prevent deleting prefix
+        mobileInput.addEventListener('keydown', (e) => {
+          const pos = mobileInput.selectionStart || 0;
+          if ((e.key === 'Backspace' && pos <= 3) || (e.key === 'Delete' && pos < 3)) {
+            e.preventDefault();
+            mobileInput.setSelectionRange(3, 3);
+          }
+        });
+      }
+
       signupFormEl.addEventListener('submit', (ev) => {
-        const pwd = signupFormEl.querySelector('#signupPassword');
-        if (!pwd) return; // nothing to validate
-        // pattern: at least 12 chars, uppercase, lowercase, digit and symbol
-        const strongRe = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/;
-        if (!strongRe.test(pwd.value || '')) {
-          ev.preventDefault();
-          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Password must be 12+ characters and include upper/lowercase letters, a number and a symbol.', { type: 'error', duration: 3500 });
-          pwd.focus();
+        // Email: simple domain check, no spaces
+        if (emailInput) {
+          const email = (emailInput.value || '').trim();
+          const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRe.test(email)) {
+            ev.preventDefault();
+            if (window.GOMK?.showToast) window.GOMK.showToast('Please enter a valid email address.', { type: 'error' });
+            emailInput.focus();
+            return;
+          }
+        }
+
+        // Mobile: validate final format +63XXXXXXXXXX
+        if (mobileInput) {
+          const mv = (mobileInput.value || '').trim();
+          if (!/^\+63\d{10}$/.test(mv)) {
+            ev.preventDefault();
+            if (window.GOMK?.showToast) window.GOMK.showToast('Please enter a valid mobile number (+63XXXXXXXXXX).', { type: 'error' });
+            mobileInput.focus();
+            return;
+          }
+        }
+
+        // Password: at least 8 chars, 1 uppercase, 1 number, 1 special, no spaces
+        if (pwd) {
+          const strongRe = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$/;
+          if (!strongRe.test(pwd.value || '')) {
+            ev.preventDefault();
+            if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.', { type: 'error', duration: 3500 });
+            pwd.focus();
+            return;
+          }
         }
       });
     }
@@ -2365,10 +2480,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const initializeProfileEditing = () => {
     console.log('Profile editing functionality initialized');
     
-    const editPasswordBtn = document.getElementById('editPasswordBtn');
-    const editMobileBtn = document.getElementById('editMobileBtn');
-    const passwordField = document.getElementById('passwordField');
-    const mobileField = document.getElementById('mobileField');
+  const editPasswordBtn = document.getElementById('editPasswordBtn');
+  const editMobileBtn = document.getElementById('editMobileBtn');
+  const passwordField = document.getElementById('passwordField');
+  const mobileField = document.getElementById('mobileField');
 
     // Helper: call backend to persist a field update
     const saveProfileField = async (field, value) => {
@@ -2397,6 +2512,111 @@ document.addEventListener('DOMContentLoaded', () => {
           passwordField.value = '';
           passwordField.placeholder = 'Enter new password';
           passwordField.focus();
+
+          // Inject confirm password input BELOW the first input (not beside)
+          const group = passwordField.closest('.profile-input-group') || passwordField.parentElement;
+          const fieldContainer = group?.parentElement || null; // typically .profile-field
+          if (group && fieldContainer && !document.getElementById('passwordConfirmField')) {
+            // Ensure the input and its edit button stay on one line
+            try { group.style.flexWrap = 'nowrap'; } catch (e) { /* ignore */ }
+            // Position the confirm group absolutely so it doesn't affect layout of siblings
+            fieldContainer.style.position = fieldContainer.style.position || 'relative';
+            const wrap = document.createElement('div');
+            wrap.className = 'profile-input-group profile-input-group--confirm';
+            wrap.id = 'passwordConfirmWrap';
+            wrap.style.position = 'absolute';
+            wrap.style.left = group.offsetLeft + 'px';
+            wrap.style.width = group.offsetWidth + 'px';
+            wrap.style.zIndex = '5';
+            // layout confirm input and its toggle side by side
+            wrap.style.display = 'grid';
+            wrap.style.gridTemplateColumns = '1fr auto';
+            wrap.style.alignItems = 'center';
+            const computeTop = () => {
+              try {
+                const rect = group.getBoundingClientRect();
+                const parentRect = fieldContainer.getBoundingClientRect();
+                const top = rect.top - parentRect.top + group.offsetHeight + 8; // 8px gap
+                wrap.style.top = top + 'px';
+              } catch (e) {
+                wrap.style.top = (group.offsetTop + group.offsetHeight + 8) + 'px';
+              }
+            };
+            computeTop();
+            // Recompute on resize while visible (keep horizontally aligned with the input)
+            const onResize = () => {
+              try {
+                wrap.style.left = group.offsetLeft + 'px';
+                wrap.style.width = group.offsetWidth + 'px';
+              } catch (e) { /* ignore */ }
+              computeTop();
+            };
+            window.addEventListener('resize', onResize);
+            wrap._onResize = onResize;
+            const confirm = document.createElement('input');
+            confirm.type = 'password';
+            confirm.className = 'profile-input';
+            confirm.id = 'passwordConfirmField';
+            confirm.placeholder = 'Confirm new password';
+            confirm.autocomplete = 'new-password';
+            confirm.style.width = '100%';
+            wrap.appendChild(confirm);
+            // Add a visibility toggle for confirm password
+            if (!document.getElementById('passwordConfirmToggleBtn')) {
+              const makeToggle = (input, id) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'auth-field-toggle';
+                btn.id = id;
+                btn.setAttribute('aria-label', 'Show password');
+                btn.setAttribute('aria-pressed', 'false');
+                btn.dataset.visible = 'false';
+                btn.innerHTML = '<span class="auth-toggle-icon" aria-hidden="true"></span>';
+                btn.addEventListener('click', (ev) => {
+                  ev.preventDefault();
+                  const isVisible = btn.dataset.visible === 'true';
+                  input.type = isVisible ? 'password' : 'text';
+                  btn.dataset.visible = isVisible ? 'false' : 'true';
+                  btn.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
+                  btn.setAttribute('aria-pressed', isVisible ? 'false' : 'true');
+                });
+                return btn;
+              };
+              wrap.appendChild(makeToggle(confirm, 'passwordConfirmToggleBtn'));
+            }
+            // Append to field container (absolute positioning avoids reflow)
+            fieldContainer.appendChild(wrap);
+          }
+
+          // Add a visibility toggle for the main password field (inline with input)
+          if (group && !document.getElementById('passwordToggleBtn')) {
+            const makeToggle = (input, id) => {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'auth-field-toggle';
+              btn.id = id;
+              btn.setAttribute('aria-label', 'Show password');
+              btn.setAttribute('aria-pressed', 'false');
+              btn.dataset.visible = 'false';
+              btn.innerHTML = '<span class="auth-toggle-icon" aria-hidden="true"></span>';
+              btn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const isVisible = btn.dataset.visible === 'true';
+                input.type = isVisible ? 'password' : 'text';
+                btn.dataset.visible = isVisible ? 'false' : 'true';
+                btn.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
+                btn.setAttribute('aria-pressed', isVisible ? 'false' : 'true');
+              });
+              return btn;
+            };
+            const editBtn = group.querySelector('.profile-edit-btn');
+            const toggle = makeToggle(passwordField, 'passwordToggleBtn');
+            if (editBtn && editBtn.parentElement === group) {
+              group.insertBefore(toggle, editBtn);
+            } else {
+              group.appendChild(toggle);
+            }
+          }
           
           // Change button to save
           editPasswordBtn.innerHTML = `
@@ -2408,14 +2628,48 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           // Save changes
           const newPassword = passwordField.value.trim();
-          if (newPassword.length >= 6) {
+          const confirmEl = document.getElementById('passwordConfirmField');
+          const confirmVal = (confirmEl?.value || '').trim();
+
+          // Password policy: 8+ chars, 1 uppercase, 1 number, 1 special, no spaces
+          const strongRe = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$/;
+          if (!strongRe.test(newPassword)) {
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.', { type: 'error' }) : alert('Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.');
+            passwordField.focus();
+            return;
+          }
+          if (newPassword !== confirmVal) {
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Passwords do not match. Please confirm your new password.', { type: 'error' }) : alert('Passwords do not match. Please confirm your new password.');
+            confirmEl?.focus();
+            return;
+          }
+
+          if (newPassword.length >= 8) {
             // Persist to backend
-            saveProfileField('password', newPassword)
+            const fd = new FormData();
+            fd.append('field', 'password');
+            fd.append('value', newPassword);
+            fd.append('password_confirm', confirmVal);
+            fetch('api/profile_update.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(r => r.json().catch(() => ({})).then(data => ({ ok: r.ok, data })))
+              .then(({ ok, data }) => {
+                if (!ok || !data?.success) throw new Error(data?.message || 'Unable to save changes');
+                return data;
+              })
               .then(() => {
                 passwordField.readOnly = true;
                 passwordField.type = 'password';
                 passwordField.value = 'M*************';
                 passwordField.placeholder = '';
+                // Remove confirm input and wrapper
+                const c = document.getElementById('passwordConfirmField');
+                const w = document.getElementById('passwordConfirmWrap');
+                if (w) { if (w._onResize) window.removeEventListener('resize', w._onResize); w.remove(); } else if (c) c.remove();
+                // Remove visibility toggles
+                const t1 = document.getElementById('passwordToggleBtn');
+                if (t1) t1.remove();
+                const t2 = document.getElementById('passwordConfirmToggleBtn');
+                if (t2) t2.remove();
                 editPasswordBtn.innerHTML = `
                   <svg viewBox="0 0 24 24">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -2430,7 +2684,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 passwordField.focus();
               });
           } else {
-            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password must be at least 6 characters long', { type: 'info' }) : alert('Password must be at least 6 characters long');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password must be at least 8 characters long', { type: 'info' }) : alert('Password must be at least 8 characters long');
             passwordField.focus();
           }
         }
@@ -2443,8 +2697,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mobileField.readOnly) {
           // Enable editing
           mobileField.readOnly = false;
-          mobileField.value = '+63 ';
+          if (!mobileField.value || !/^\+63\d{0,10}$/.test(mobileField.value.replace(/\s+/g, ''))) {
+            mobileField.value = '+63';
+          }
           mobileField.focus();
+
+          // Enforce +63 prefix and 10 digits after, no spaces while editing
+          const ensurePrefix = () => {
+            let v = (mobileField.value || '').replace(/\s+/g, '');
+            if (!v.startsWith('+63')) v = '+63' + v.replace(/^[+]*(63)?/, '');
+            const rest = v.slice(3).replace(/\D+/g, '').slice(0, 10);
+            mobileField.value = '+63' + rest;
+          };
+          mobileField.addEventListener('input', ensurePrefix);
+          mobileField.addEventListener('blur', ensurePrefix);
+          mobileField.addEventListener('keydown', (e) => {
+            const pos = mobileField.selectionStart || 0;
+            if ((e.key === 'Backspace' && pos <= 3) || (e.key === 'Delete' && pos < 3)) {
+              e.preventDefault();
+              mobileField.setSelectionRange(3, 3);
+            }
+          });
           
           // Change button to save
           editMobileBtn.innerHTML = `
@@ -2456,7 +2729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           // Save changes
           const newMobile = mobileField.value.trim();
-          if (newMobile.length >= 10) {
+          if (/^\+63\d{10}$/.test(newMobile)) {
             saveProfileField('mobile', newMobile)
               .then((data) => {
                 mobileField.readOnly = true;
@@ -2475,7 +2748,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 mobileField.focus();
               });
           } else {
-            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Please enter a valid mobile number', { type: 'info' }) : alert('Please enter a valid mobile number');
+            (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Mobile must be +63 followed by 10 digits.', { type: 'info' }) : alert('Mobile must be +63 followed by 10 digits.');
             mobileField.focus();
           }
         }
@@ -2489,6 +2762,13 @@ document.addEventListener('DOMContentLoaded', () => {
           passwordField.readOnly = true;
           passwordField.value = 'M*************';
           passwordField.placeholder = '';
+          const c = document.getElementById('passwordConfirmField');
+          const w = document.getElementById('passwordConfirmWrap');
+          if (w) { if (w._onResize) window.removeEventListener('resize', w._onResize); w.remove(); } else if (c) c.remove();
+          const t1 = document.getElementById('passwordToggleBtn');
+          if (t1) t1.remove();
+          const t2 = document.getElementById('passwordConfirmToggleBtn');
+          if (t2) t2.remove();
           
           editPasswordBtn.innerHTML = `
             <svg viewBox="0 0 24 24">
@@ -2501,7 +2781,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (mobileField && !mobileField.readOnly) {
           mobileField.readOnly = true;
-          mobileField.value = '+63 9451234567';
+          // Keep current value as-is; if invalid, user can re-edit later
           
           editMobileBtn.innerHTML = `
             <svg viewBox="0 0 24 24">

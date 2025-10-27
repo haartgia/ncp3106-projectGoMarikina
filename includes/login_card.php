@@ -23,13 +23,13 @@ unset($_SESSION['login_error']);
 
 				<label class="auth-field" for="loginEmail">
 					<span class="auth-field-label">Email</span>
-					<input type="text" id="loginEmail" name="email" placeholder="Email" required autocomplete="username" />
+					<input type="text" id="loginEmail" name="email" placeholder="Email" required autocomplete="username" pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$" />
 				</label>
 
 				<label class="auth-field" for="loginPassword">
 					<span class="auth-field-label">Password</span>
 					<div class="auth-field-input">
-						<input type="password" id="loginPassword" name="password" placeholder="Password" required autocomplete="current-password" data-password-field />
+						<input type="password" id="loginPassword" name="password" placeholder="Password" required autocomplete="current-password" data-password-field pattern="^\S+$" title="No spaces allowed" />
 						<button type="button" class="auth-field-toggle" data-password-toggle="loginPassword" aria-label="Show password">
 							<span class="auth-toggle-icon" aria-hidden="true"></span>
 						</button>
@@ -57,20 +57,21 @@ unset($_SESSION['login_error']);
 
 				<label class="auth-field" for="signupMobile">
 					<span class="auth-field-label">Mobile Number</span>
-					<!-- Enforce numeric input client-side: pattern + maxlength for common mobile lengths; JS will filter non-digits -->
-					<input type="tel" id="signupMobile" name="mobile" placeholder="Mobile Number" required autocomplete="tel" pattern="[0-9]+" maxlength="15" inputmode="numeric" data-numeric-only />
+					<!-- PH format: +63XXXXXXXXXX (10 digits after +63). No spaces allowed. -->
+					<input type="tel" id="signupMobile" name="mobile" placeholder="+63XXXXXXXXXX" value="+63" required autocomplete="tel" pattern="\+63\d{10}" maxlength="13" inputmode="tel" />
 				</label>
 
 				<label class="auth-field" for="signupEmail">
 					<span class="auth-field-label">Email</span>
-					<input type="email" id="signupEmail" name="email" placeholder="Email" required autocomplete="email" />
+					<!-- Must include an @ and domain, no spaces -->
+					<input type="email" id="signupEmail" name="email" placeholder="Email" required autocomplete="email" pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$" />
 				</label>
 
 				<label class="auth-field" for="signupPassword">
 					<span class="auth-field-label">Password</span>
 					<div class="auth-field-input">
-						<!-- Require strong password: min 12 chars, uppercase, lowercase, number, and symbol -->
-						<input type="password" id="signupPassword" name="password" placeholder="Password" required autocomplete="new-password" data-password-field minlength="12" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}" title="At least 12 characters, with uppercase, lowercase, number and symbol" />
+						<!-- Require: at least 8 chars, 1 uppercase, 1 number, 1 special char, and no spaces -->
+						<input type="password" id="signupPassword" name="password" placeholder="Password" required autocomplete="new-password" data-password-field minlength="8" pattern="^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$" title="At least 8 characters, include an uppercase letter, a number, a special character, and no spaces" />
 						<button type="button" class="auth-field-toggle" data-password-toggle="signupPassword" aria-label="Show password">
 							<span class="auth-toggle-icon" aria-hidden="true"></span>
 						</button>

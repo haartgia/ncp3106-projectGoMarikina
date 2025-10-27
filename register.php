@@ -20,16 +20,23 @@ if ($email === '' || $password === '' || $first_name === '' || $last_name === ''
     exit;
 }
 
-// Server-side: ensure mobile contains only digits (no letters/symbols)
-if (!preg_match('/^[0-9]+$/', $mobile)) {
-    $_SESSION['login_error'] = 'Mobile number must contain digits only.';
+// Server-side: enforce PH format +63XXXXXXXXXX (10 digits after +63) and no spaces
+if (!preg_match('/^\+63\d{10}$/', $mobile)) {
+    $_SESSION['login_error'] = 'Mobile must be +63 followed by 10 digits (no spaces).';
     header('Location: profile.php');
     exit;
 }
 
-// Server-side: validate password strength (min 12 chars, upper, lower, digit, symbol)
-if (!preg_match('/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/', $password)) {
-    $_SESSION['login_error'] = 'Password must be at least 12 characters and include uppercase, lowercase, a number, and a symbol.';
+// Server-side: validate email has domain and no spaces
+if (!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+    $_SESSION['login_error'] = 'Please enter a valid email address (must include a domain, no spaces).';
+    header('Location: profile.php');
+    exit;
+}
+
+// Server-side: validate password: min 8, 1 uppercase, 1 number, 1 special, no spaces
+if (!preg_match('/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$/', $password)) {
+    $_SESSION['login_error'] = 'Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.';
     header('Location: profile.php');
     exit;
 }

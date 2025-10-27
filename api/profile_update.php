@@ -25,6 +25,7 @@ if ($user_id <= 0) {
 
 $field = $_POST['field'] ?? '';
 $value = trim((string)($_POST['value'] ?? ''));
+$passwordConfirm = isset($_POST['password_confirm']) ? trim((string)$_POST['password_confirm']) : null;
 
 if ($field === '' || $value === '') {
     http_response_code(422);
@@ -34,28 +35,32 @@ if ($field === '' || $value === '') {
 
 try {
     if ($field === 'mobile') {
-        // Basic format guard: allow "+", digits, spaces, hyphens. Keep reasonable length.
-        $normalized = preg_replace('/[^+0-9]/', '', $value);
-        if ($normalized === null) { $normalized = $value; }
-        if (strlen($normalized) < 10) {
+        // Enforce PH mobile format: +63 followed by 10 digits, no spaces
+        if (!preg_match('/^\+63\d{10}$/', $value)) {
             http_response_code(422);
-            echo json_encode(['success' => false, 'message' => 'Please enter a valid mobile number']);
+            echo json_encode(['success' => false, 'message' => 'Mobile must be +63 followed by 10 digits.']);
             exit;
         }
 
         $stmt = $conn->prepare('UPDATE users SET mobile = ? WHERE id = ?');
-        $stmt->bind_param('si', $normalized, $user_id);
+        $stmt->bind_param('si', $value, $user_id);
         $ok = $stmt->execute();
         $stmt->close();
 
         if (!$ok) throw new Exception('Database error while updating mobile');
 
-        echo json_encode(['success' => true, 'message' => 'Mobile number updated', 'field' => 'mobile', 'value' => $normalized]);
+        echo json_encode(['success' => true, 'message' => 'Mobile number updated', 'field' => 'mobile', 'value' => $value]);
         exit;
     } elseif ($field === 'password') {
-        if (strlen($value) < 6) {
+        // Password policy: at least 8 chars, 1 uppercase, 1 number, 1 special, no spaces
+        if (!preg_match('/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$/', $value)) {
             http_response_code(422);
-            echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters']);
+            echo json_encode(['success' => false, 'message' => 'Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.']);
+            exit;
+        }
+        if ($passwordConfirm === null || $passwordConfirm === '' || $passwordConfirm !== $value) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'Passwords do not match.']);
             exit;
         }
         $hash = password_hash($value, PASSWORD_DEFAULT);

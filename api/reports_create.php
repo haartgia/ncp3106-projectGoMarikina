@@ -97,7 +97,7 @@ if (isset($_FILES['photo'])) {
 
 if ($errors) {
     http_response_code(422);
-    echo json_encode(['success' => false, 'message' => implode('\n', $errors)]);
+    echo json_encode(['success' => false, 'message' => implode('; ', $errors)]);
     exit;
 }
 
@@ -125,22 +125,64 @@ try {
     $hasUser = ($userId !== null);
     $hasImage = ($imagePath !== null);
 
-    // Include latitude/longitude columns (may be NULL)
-    if ($hasUser && $hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('isssssdd', $userId, $title, $category, $description, $location, $imagePath, $latitude, $longitude);
-    } elseif ($hasUser && !$hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('issssdd', $userId, $title, $category, $description, $location, $latitude, $longitude);
-    } elseif (!$hasUser && $hasImage) {
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('sssssdd', $title, $category, $description, $location, $imagePath, $latitude, $longitude);
-    } else { // no user, no image
-        $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
-        $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latitude, $longitude);
+    // Detect if latitude/longitude columns exist to avoid fatal errors on
+    // instances where the migration hasn't been applied yet.
+    $hasLatLng = false;
+    try {
+        $chkLat = $conn->query("SHOW COLUMNS FROM reports LIKE 'latitude'");
+        $chkLng = $conn->query("SHOW COLUMNS FROM reports LIKE 'longitude'");
+        $hasLatLng = ($chkLat && $chkLat->num_rows > 0) && ($chkLng && $chkLng->num_rows > 0);
+        if ($chkLat) { $chkLat->close(); }
+        if ($chkLng) { $chkLng->close(); }
+    } catch (Throwable $e) {
+        // If SHOW COLUMNS fails, assume columns are missing and proceed without them
+        $hasLatLng = false;
     }
+
+    // Build and run the appropriate INSERT, guarding prepare() results
+    if ($hasLatLng) {
+        if ($hasUser && $hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('isssssdd', $userId, $title, $category, $description, $location, $imagePath, $latitude, $longitude);
+        } elseif ($hasUser && !$hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('issssdd', $userId, $title, $category, $description, $location, $latitude, $longitude);
+        } elseif (!$hasUser && $hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('sssssdd', $title, $category, $description, $location, $imagePath, $latitude, $longitude);
+        } else { // no user, no image
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latitude, $longitude);
+        }
+    } else {
+        // Fallback for older schemas without latitude/longitude columns
+        if ($hasUser && $hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('isssss', $userId, $title, $category, $description, $location, $imagePath);
+        } elseif ($hasUser && !$hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('issss', $userId, $title, $category, $description, $location);
+        } elseif (!$hasUser && $hasImage) {
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('sssss', $title, $category, $description, $location, $imagePath);
+        } else { // no user, no image
+            $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
+            if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
+            $stmt->bind_param('ssss', $title, $category, $description, $location);
+        }
+    }
+
     if (!$stmt->execute()) {
-        throw new Exception($stmt->error);
+        $err = $stmt->error ?: $conn->error;
+        $stmt->close();
+        throw new Exception($err);
     }
     $newId = $stmt->insert_id;
     $stmt->close();
@@ -199,6 +241,6 @@ try {
     exit;
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Server error creating report']);
+    echo json_encode(['success' => false, 'message' => 'Server error creating report', 'error' => $e->getMessage()]);
     exit;
 }

@@ -271,6 +271,9 @@ try {
                                 aria-haspopup="dialog"
                                 aria-label="<?php echo $ariaLabel; ?>"
                                 data-report-modal-trigger
+                                data-id="<?php echo htmlspecialchars($report['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                <?php if (!empty($report['latitude'])): ?>data-lat="<?php echo htmlspecialchars($report['latitude'], ENT_QUOTES, 'UTF-8'); ?>"<?php endif; ?>
+                                <?php if (!empty($report['longitude'])): ?>data-lng="<?php echo htmlspecialchars($report['longitude'], ENT_QUOTES, 'UTF-8'); ?>"<?php endif; ?>
                                 data-status="<?php echo htmlspecialchars($datasetStatus, ENT_QUOTES, 'UTF-8'); ?>"
                                 data-title="<?php echo $titleDisplay; ?>"
                                 data-summary="<?php echo $summaryDisplayFull; ?>"
@@ -302,7 +305,8 @@ try {
                                                     <span class="report-meta-separator" aria-hidden="true">•</span>
                                                     <?php
                                                         // Show a summarized location in the card, keep full in title
-                                                        $locationShort = function_exists('summarize_location') ? summarize_location($locationDisplay, 3, 80) : $locationDisplay;
+                                                        // Use 2 components and a shorter max length so the card stays compact
+                                                        $locationShort = function_exists('summarize_location') ? summarize_location($locationDisplay, 2, 40) : $locationDisplay;
                                                     ?>
                                                     <span class="report-location" title="<?php echo htmlspecialchars($locationDisplay, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($locationShort, ENT_QUOTES, 'UTF-8'); ?></span>
                                                 <?php endif; ?>
@@ -310,12 +314,12 @@ try {
                                         </div>
                                     </div>
                                     <div class="report-header-actions">
-                                        <button type="button" class="icon-button" aria-label="View location on map">
+                                        <button type="button" class="icon-button location-button" aria-label="View location on map">
                                             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                                                 <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
                                             </svg>
                                         </button>
-                                        <button type="button" class="icon-button" aria-label="Share report">
+                                        <button type="button" class="icon-button share-button" aria-label="Share report">
                                             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                                                 <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
                                                 <path d="m7 9 5-6 5 6" />
@@ -328,8 +332,7 @@ try {
                                 </header>
                                 <?php if ($summaryTrimDisplay !== ''): ?>
                                     <p class="report-summary" data-expanded="false">
-                                        <span class="report-summary__text" title="<?php echo $summaryDisplayFull; ?>"><?php echo $summaryTrimDisplay; ?></span>
-                                        <?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?>
+                                        <span class="report-summary__text" title="<?php echo $summaryDisplayFull; ?>"><?php echo $summaryTrimDisplay; ?><?php if ($isTruncated): ?> <a href="#" class="report-see-more">See more</a><?php endif; ?></span>
                                     </p>
                                 <?php endif; ?>
                                 <?php if ($imageAttr !== ''): ?>
@@ -457,6 +460,34 @@ try {
             </div>
         </div>
     </div>
+    <!-- Map view modal (used when clicking location on a report card) -->
+    <div id="mapModal" class="modal" aria-hidden="true" style="display:none;">
+        <div class="modal-content map-modal-content" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <h2>View location</h2>
+                <button type="button" class="modal-close" id="mapModalClose" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="map-picker-wrap">
+                    <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." />
+                    <div id="reportMap" class="report-map" style="height:420px;"></div>
+                    <div id="infowindow-content" class="visually-hidden">
+                        <span id="place-name" data-key="place-name"></span>
+                        <span id="place-address" data-key="place-address"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="map-footer-actions">
+                    <button type="button" id="mapClearSelection" class="btn-map-clear">CLEAR</button>
+                    <button type="button" id="mapUsePlace" class="btn-map-use">USE THIS PLACE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MarkerCluster plugin for Leaflet (optional; script is loaded before app script) -->
+    <script defer src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script src="./assets/js/script.js" defer></script>
 </body>
 </html>

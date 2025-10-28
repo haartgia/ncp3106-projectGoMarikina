@@ -11,6 +11,9 @@ require __DIR__ . '/config/auth.php';
     <link rel="stylesheet" href="assets/css/style.css">
     <!-- Leaflet CSS (loaded only on create-report page where map picker is used) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css">
 </head>
 <body>
     <div class="dashboard-layout">
@@ -148,7 +151,7 @@ require __DIR__ . '/config/auth.php';
                             <div class="modal-body">
                         <div class="map-picker-wrap">
                             <!-- Search input for Nominatim/LocationIQ autocomplete -->
-                            <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." style="margin:10px 12px;" />
+                            <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." />
                             <!-- Leaflet map container -->
                             <div id="reportMap" class="report-map" style="height:420px;"></div>
                         <div id="infowindow-content" class="visually-hidden">
@@ -171,6 +174,8 @@ require __DIR__ . '/config/auth.php';
 
     <!-- Leaflet JS (must load before the app script that uses it) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- MarkerCluster plugin -->
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script src="assets/js/script.js" defer></script>
 </body>
 </html>

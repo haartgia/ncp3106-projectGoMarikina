@@ -198,6 +198,30 @@ body.modal-open {
   box-shadow: 0 8px 32px rgba(10,20,50,0.12);
   max-height: 240px;
   overflow-y: auto;
+
+  /* Ensure autocomplete sits above the map and modal chrome */
+  position: absolute;
+  z-index: 2300;
+}
+
+/* Pretty Leaflet popup styling for project */
+.gomk-popup .leaflet-popup-content-wrapper {
+  background: #fff;
+  color: var(--text-primary);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(10,20,50,0.16);
+  padding: 10px 14px;
+  line-height: 1.2;
+}
+.gomk-popup .leaflet-popup-content {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.gomk-popup .leaflet-popup-tip {
+  background: #fff;
+}
+.gomk-popup .leaflet-popup-close-button {
+  color: var(--text-primary);
 }
 .autocomplete-results {
   position: absolute; /* positioned via JS */
@@ -264,6 +288,53 @@ body.modal-open {
 
 /* Position Leaflet zoom control to top-left inside modal map */
 .report-map .leaflet-control-zoom { left: 8px; top: 8px; }
+
+/* Custom small marker used for report points */
+.gomk-marker {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(16,32,63,0.18);
+  border: 2px solid #fff;
+  transform: translate3d(0,0,0);
+}
+
+/* Cluster styling to match markers but larger and show count */
+.gomk-cluster-wrapper { background: transparent; }
+.gomk-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(16,32,63,0.18);
+  border: 3px solid rgba(255,255,255,0.9);
+  background: linear-gradient(180deg, rgba(255,99,99,0.95), rgba(216,69,69,0.95));
+}
+.gomk-cluster-wrapper .gomk-cluster { font-size: 13px; }
+
+/* Style cluster popup list items */
+.gomk-cluster-popup { font-family: 'Poppins', sans-serif; color: var(--text-primary); }
+.gomk-cluster-item { padding: 6px 8px; border-bottom: 1px solid rgba(16,32,63,0.04); }
+.gomk-cluster-item:last-child { border-bottom: none; }
+.gomk-cluster-item a.gomk-view-report { margin-left: 8px; font-weight: 600; color: var(--chip-blue); text-decoration: none; }
+.gomk-cluster-item a.gomk-view-report:hover { text-decoration: underline; }
+
+/* Keep default leaflet popup chrome but tweak interior to match the app */
+.leaflet-popup-content-wrapper {
+  font-family: 'Poppins', sans-serif;
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(10,20,50,0.12);
+}
+.leaflet-popup-content {
+  font-size: 0.95rem;
+}
 
 /* Close button inside modal header: position to top-right with small inset */
 .map-modal-content .modal-close {
@@ -1769,6 +1840,25 @@ body.nav-open .sidebar-logo {
   text-decoration: underline;
 }
 
+/* Animate the inline summary expand/collapse for a smoother UX. We transition
+   max-height and opacity. When collapsed we clamp to a single line; when
+   expanded we allow the text to flow. The transition is short to feel snappy.
+*/
+.report-summary {
+  /* create a clipping context for the text so max-height transitions work */
+  overflow: hidden;
+}
+.report-summary .report-summary__text {
+  display: block;
+  max-height: 1.6em; /* roughly one line */
+  opacity: 1;
+  transition: max-height 220ms ease, opacity 180ms ease;
+}
+.report-summary[data-expanded="true"] .report-summary__text {
+  max-height: 1000px; /* large enough to show the whole text */
+  opacity: 1;
+}
+
 /* Media container for reports */
 .report-media {
   width: 100%;
@@ -2080,6 +2170,62 @@ body.modal-open {
   height: 100%;
   display: block;
   object-fit: cover;
+}
+
+/* Portrait-image modal layout: when the dialog has this modifier the
+   content is split into two columns with media on the right for taller images.
+   This improves composition for portrait photos on wide screens. */
+@media (min-width: 880px) {
+  .report-modal__dialog.report-modal--portrait-image .report-modal__content {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+    /* ensure rows size to their content so the media can align to the top */
+    grid-auto-rows: min-content;
+  }
+
+  .report-modal__dialog.report-modal--portrait-image .report-modal__media {
+    align-self: start;
+  }
+
+  /* Force the media column to start at the top of the grid and span the
+     relevant content rows so it doesn't visually drop below the header. */
+  .report-modal__dialog.report-modal--portrait-image .report-modal__media {
+    grid-row: 1 / 4;
+    margin-top: 0;
+    align-self: start;
+    justify-self: end;
+  }
+
+  /* Force header, meta and summary to the left column and media to the right
+     when using the portrait two-column layout so reporter/location sit on
+     the left with the rest of the details. */
+  .report-modal__dialog.report-modal--portrait-image .report-modal__header,
+  .report-modal__dialog.report-modal--portrait-image .report-modal__meta-grid,
+  .report-modal__dialog.report-modal--portrait-image .report-modal__summary {
+    grid-column: 1 / 2;
+  }
+
+  .report-modal__dialog.report-modal--portrait-image .report-modal__media {
+    grid-column: 2 / 3;
+  }
+
+  /* When using the portrait layout, don't force a 16:9 box on the media
+     container — allow it to size to the image so portrait images show fully. */
+  .report-modal__dialog.report-modal--portrait-image .report-modal__media {
+    aspect-ratio: auto;
+    width: 320px; /* matches grid column width */
+    max-width: 100%;
+  }
+
+  .report-modal__dialog.report-modal--portrait-image .report-modal__media img {
+    width: 100%;
+    height: auto;
+    max-height: 76vh;
+    object-fit: contain;
+    border-radius: 10px;
+  }
 }
 
 .report-modal__media.no-image img {
@@ -5482,7 +5628,7 @@ body.nav-open .nav-scrim {
   border-radius: 20px;
   padding: 0;
 }
-.profile-hero-inner .profile-card { background: transparent; box-shadow: none; padding: 0; border: 0; }
+.profile-hero-inner .profile-card { background: transparent; box-shadow: none; padding: 0; border: 0; min-height: auto; }
 /* Remove dark blue focus rings on inputs and edit buttons (keep subtle accessibility-friendly state via border color) */
 .profile-input:focus { outline: none; box-shadow: none; border-color: var(--border-soft); }
 .profile-edit-btn:focus { outline: none; box-shadow: none; }

@@ -617,6 +617,17 @@ document.addEventListener('DOMContentLoaded', () => {
         modalImage.alt = `${titleText} photo`;
         modalImage.hidden = false;
         modalImage.removeAttribute('aria-hidden');
+        // Detect aspect ratio when image loads and add a modifier class for portrait images
+        try {
+          modalImage.onload = () => {
+            try {
+              const isPortrait = modalImage.naturalHeight > modalImage.naturalWidth;
+              if (modalDialog) {
+                modalDialog.classList.toggle('report-modal--portrait-image', !!isPortrait);
+              }
+            } catch (e) { /* ignore */ }
+          };
+        } catch (e) { /* ignore */ }
         modalPlaceholder.hidden = true;
         modalPlaceholder.setAttribute('aria-hidden', 'true');
         modalPlaceholder.style.display = 'none';
@@ -633,6 +644,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const openModal = (card) => {
       if (!card) return;
+      // Close mobile nav if open so modal is visible on small screens
+      try { if (typeof closeMobileNav === 'function') closeMobileNav(); } catch (e) {}
       if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);
         modalCloseTimer = null;
@@ -694,6 +707,42 @@ document.addEventListener('DOMContentLoaded', () => {
         modalSummary.textContent = summary || 'No summary provided.';
       }
       updateMedia(image, title || 'Report');
+
+      // If the card contains lat/lng, make the modal location clickable to open the map and zoom to marker
+      try {
+        if (modalLocation && modalLocationItem) {
+          const lat = card.getAttribute('data-lat') || card.dataset.lat;
+          const lng = card.getAttribute('data-lng') || card.dataset.lng;
+          // Remove any existing handler
+          if (modalLocationItem._mapHandler) {
+            try { modalLocationItem.removeEventListener('click', modalLocationItem._mapHandler); } catch (e) { /* ignore */ }
+            modalLocationItem._mapHandler = null;
+          }
+          if (lat && lng) {
+            modalLocation.dataset.lat = lat;
+            modalLocation.dataset.lng = lng;
+            modalLocation.style.cursor = 'pointer';
+            modalLocationItem._mapHandler = (ev) => {
+              ev && ev.preventDefault && ev.preventDefault();
+              ev && ev.stopPropagation && ev.stopPropagation();
+              try {
+                const nlat = Number(lat);
+                const nlng = Number(lng);
+                if (!Number.isFinite(nlat) || !Number.isFinite(nlng)) return;
+                if (typeof window.__gomkOpenMapAt === 'function') {
+                  window.__gomkOpenMapAt(nlat, nlng, modalLocation.textContent || '');
+                } else if (typeof openMapModal === 'function') {
+                  // fallback: open map modal normally
+                  openMapModal();
+                }
+              } catch (e) { /* ignore */ }
+            };
+            modalLocationItem.addEventListener('click', modalLocationItem._mapHandler);
+          } else {
+            modalLocation.style.removeProperty('cursor');
+          }
+        }
+      } catch (e) { /* ignore */ }
     };
 
     const closeModal = () => {
@@ -796,39 +845,88 @@ document.addEventListener('DOMContentLoaded', () => {
         const setExpanded = (expand) => {
           p.dataset.expanded = expand ? 'true' : 'false';
 
-          // Reset text to either collapsed or full
+          // Smooth height animation: measure start/end heights and animate
+          const targetText = expand ? fullText : (p.dataset.collapsedText || '');
+          // Measure start height
+          const startHeight = p.getBoundingClientRect().height;
+
+          // Apply target text off-DOM to measure end height
+          const clone = p.cloneNode(true);
+          // Ensure clone has only the text we want for measurement
+          const cloneTextHolder = clone.querySelector('.report-summary__text') || clone;
+          if (cloneTextHolder) cloneTextHolder.textContent = targetText;
+          clone.style.position = 'absolute';
+          clone.style.visibility = 'hidden';
+          clone.style.height = 'auto';
+          clone.style.maxHeight = 'none';
+          clone.style.overflow = 'visible';
+          p.parentNode && p.parentNode.appendChild(clone);
+          const endHeight = clone.getBoundingClientRect().height;
+          clone.remove();
+
+          // Apply inline height to start the transition
+          p.style.height = startHeight + 'px';
+          p.style.overflow = 'hidden';
+          p.style.transition = 'height 220ms ease';
+
+          // Swap the content immediately so measured endHeight matches final content
           if (textHolder.classList && textHolder.classList.contains('report-summary__text')) {
-            textHolder.textContent = expand ? fullText : (p.dataset.collapsedText || '');
+            textHolder.textContent = targetText;
           } else {
-            // textHolder is the paragraph itself
-            textHolder.textContent = expand ? fullText : (p.dataset.collapsedText || '');
+            textHolder.textContent = targetText;
           }
 
-          // Remove any existing action link
+          // Remove any existing action link and recreate with updated handler
           const existing = p.querySelector('.report-see-more, .report-see-less');
           if (existing) existing.remove();
-
-          // Append the appropriate action link after the text holder
           const link = document.createElement('a');
           link.href = '#';
           link.className = expand ? 'report-see-less' : 'report-see-more';
-          link.textContent = expand ? ' See less' : ' See more';
+          link.textContent = expand ? 'See less' : 'See more';
           link.addEventListener('click', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
             setExpanded(!expand);
           });
-
-          p.appendChild(link);
-
-          // Reflow Masonry once after DOM/text changes to avoid jank/freezes
           try {
-            if (typeof window.__gomkScheduleMasonryLayout === 'function') {
-              window.__gomkScheduleMasonryLayout();
-            } else if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
-              window.__gomkMasonry.layout();
+            if (textHolder && textHolder !== p && textHolder.appendChild) {
+              textHolder.appendChild(link);
+            } else {
+              p.appendChild(link);
             }
-          } catch (e) { /* ignore */ }
+          } catch (e) { p.appendChild(link); }
+
+          // Trigger layout and animate to end height
+          // Use requestAnimationFrame to ensure style changes are flushed
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              p.style.height = endHeight + 'px';
+            });
+          });
+
+          const cleanup = () => {
+            p.style.transition = '';
+            p.style.height = '';
+            p.style.overflow = '';
+            p.removeEventListener('transitionend', onEnd);
+            // Reflow Masonry after DOM/text changes to avoid jank/freezes
+            try {
+              if (typeof window.__gomkScheduleMasonryLayout === 'function') {
+                window.__gomkScheduleMasonryLayout();
+              } else if (window.__gomkMasonry && typeof window.__gomkMasonry.layout === 'function') {
+                window.__gomkMasonry.layout();
+              }
+            } catch (e) { /* ignore */ }
+          };
+
+          const onEnd = (ev) => {
+            if (ev && ev.target !== p) return;
+            cleanup();
+          };
+
+          p.addEventListener('transitionend', onEnd);
+          // Fallback cleanup in case transitionend doesn't fire
+          setTimeout(cleanup, 320);
         };
 
         // Decide whether we need a see-more toggle. Prefer server-rendered
@@ -836,8 +934,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasSeeMore = !!p.querySelector('.report-see-more');
         const collapsed = p.dataset.collapsedText || '';
         const needsToggle = () => {
-          // If full text is longer than the collapsed snapshot, we need a toggle.
-          if (fullText && fullText.length > collapsed.length) return true;
+          // If the full text is essentially the same as the collapsed snapshot,
+          // don't show a toggle. Also skip toggles for very short messages.
+          try {
+            const f = (fullText || '').trim();
+            const c = (collapsed || '').trim();
+            if (!f) return false;
+            // If text identical, no toggle
+            if (f === c) return false;
+            // If very short (few chars or words), don't show a toggle
+            if (f.length <= 20) return false;
+            const words = f.split(/\s+/).filter(Boolean);
+            if (words.length <= 2) return false;
+            // If full text is longer than the collapsed snapshot by a meaningful
+            // amount (avoid showing link for tiny differences like punctuation)
+            if ((f.length - c.length) > 6) return true;
+          } catch (e) { /* ignore */ }
           // Otherwise, check if the rendered text is visually overflowing its box.
           try {
             return textHolder.scrollHeight > textHolder.clientHeight + 1;
@@ -853,6 +965,51 @@ document.addEventListener('DOMContentLoaded', () => {
       if (summaryP) {
         initInlineToggle(summaryP);
       }
+
+      // Wire location & share icon buttons inside each card
+      try {
+        const locBtn = card.querySelector('.location-button');
+        if (locBtn) {
+          locBtn.addEventListener('click', (ev) => {
+            ev.preventDefault(); ev.stopPropagation();
+            const lat = card.dataset.lat || card.getAttribute('data-lat');
+            const lng = card.dataset.lng || card.getAttribute('data-lng');
+            const loc = card.dataset.location || card.getAttribute('data-location');
+            if (lat && lng) {
+              try { window.__gomkOpenMapAt(Number(lat), Number(lng), loc || ''); } catch (e) { /* fallback */ }
+            } else {
+              // no coords: open the map modal to allow user search
+              try { if (typeof openMapModal === 'function') openMapModal(); } catch (e) {}
+            }
+          });
+        }
+        const shareBtn = card.querySelector('.share-button');
+        if (shareBtn) {
+          shareBtn.addEventListener('click', async (ev) => {
+            ev.preventDefault(); ev.stopPropagation();
+            const id = card.dataset.id || card.getAttribute('data-id');
+            const title = card.dataset.title || card.getAttribute('data-title') || '';
+            const pageUrl = (window.location.origin || '') + (window.location.pathname || '') + (id ? ('?report=' + encodeURIComponent(id)) : '');
+            // Try native share first
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: title || 'Citizen report', text: title || '', url: pageUrl });
+                return;
+              }
+            } catch (e) { /* ignore */ }
+            // Fallback: copy to clipboard
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(pageUrl);
+                (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Link copied to clipboard', { type: 'success' }) : alert('Link copied to clipboard');
+                return;
+              }
+            } catch (e) { /* ignore */ }
+            // Last resort: prompt with the URL
+            try { window.prompt('Copy this link', pageUrl); } catch (e) { /* ignore */ }
+          });
+        }
+      } catch (e) { /* ignore wiring errors per-card */ }
 
       // Marquee-like animated scrolling for overflowing location text.
       const initLocationMarquee = (el) => {
@@ -1117,6 +1274,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setNavOpen(false);
       }
     });
+    // Helper to programmatically close the mobile nav from elsewhere in the app
+    const closeMobileNav = () => {
+      try {
+        document.body.classList.remove('nav-open');
+        navToggleButtons.forEach((button) => button.setAttribute('aria-expanded', 'false'));
+        if (navScrim) navScrim.setAttribute('hidden', 'hidden');
+      } catch (e) { /* noop */ }
+    };
 
     const handleNavMediaChange = () => {
       if (!navMediaQuery.matches) {
@@ -2072,17 +2237,25 @@ document.addEventListener('DOMContentLoaded', () => {
   async function initMapPlacePicker() {
     const mapModal = document.getElementById('mapModal');
     const mapModalClose = document.getElementById('mapModalClose');
-    const locationField = document.querySelector('.location-field');
-    const mapEl = document.getElementById('reportMap');
+  const locationField = document.querySelector('.location-field');
+  const mapEl = document.getElementById('reportMap');
     const placeInput = document.getElementById('leafletPlaceInput');
     const usePlaceBtn = document.getElementById('mapUsePlace');
     const clearBtn = document.getElementById('mapClearSelection');
 
-    if (!locationField || !mapEl) return;
+  // Proceed if a map container exists. locationField is optional (present on create-report).
+  if (!mapEl) return;
 
     let map = null;
     let marker = null;
     let chosenPlace = null;
+
+    // Small helper to escape HTML when building popup content
+    const escapeHtml = (s) => {
+      try {
+        return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+      } catch (e) { return String(s); }
+    };
 
     // Initialize Leaflet map when modal opens (lazy init)
     const ensureMap = () => {
@@ -2090,19 +2263,36 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
   // Marikina bounding box (approx) - lat, lng pairs: [[south, west], [north, east]]
   const marikinaBounds = L.latLngBounds([[14.57, 121.02], [14.76, 121.16]]);
-  // Initialize map centered in Marikina and restrict to Marikina bounds
-  map = L.map(mapEl).setView([14.650, 121.102], 13);
-  map.setMaxBounds(marikinaBounds);
-  map.options.maxBoundsViscosity = 0.95;
+  // Initialize map centered in Marikina and restrict to Marikina bounds.
+  // Limit zoom levels and tile loading to reduce resource usage.
+  map = L.map(mapEl, {
+    center: [14.650, 121.102],
+    zoom: 14,
+    minZoom: 13,
+    maxZoom: 18,
+    maxBounds: marikinaBounds,
+    maxBoundsViscosity: 0.95,
+    preferCanvas: true,
+    worldCopyJump: false
+  });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+  // Use a cleaner basemap (CartoDB Positron) to reduce POI icon clutter and
+  // provide a softer, more modern look. This reduces map 'other' icons.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    minZoom: 13,
+    maxZoom: 18,
+    noWrap: false,
+    detectRetina: false,
+    keepBuffer: 1,
+    bounds: marikinaBounds
+  }).addTo(map);
 
+  // Main draggable marker for user selection
   marker = L.marker([14.65, 121.102], { draggable: true }).addTo(map);
-  try { marker.bindPopup('Drag or click to set location'); } catch (e) {}
-        marker.on('dragend', async () => {
+  // Bind an initially empty popup (we'll update content when selection happens)
+  try { marker.bindPopup(''); } catch (e) {}
+        marker.on('dragend', () => {
           const pos = marker.getLatLng();
           // clamp marker to Marikina bounds if dragged outside
           try {
@@ -2119,18 +2309,222 @@ document.addEventListener('DOMContentLoaded', () => {
           const locInput = document.getElementById('location');
           if (latIn) latIn.value = pos.lat;
           if (lngIn) lngIn.value = pos.lng;
-          // Reverse geocode and populate address
-          const rev = await nominatimReverse(pos.lat, pos.lng);
-          const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
-          if (locInput && display) locInput.value = display;
-          try { if (placeInput && display) placeInput.value = display; } catch (e) {}
-          try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
-          try { if (display) marker.bindPopup(display).openPopup(); } catch (e) {}
-          try { chosenPlace = { lat: pos.lat, lon: pos.lng, display_name: display }; } catch (e) {}
+          // Show lat/lng immediately and reverse-geocode in background so UI isn't blocked
+          if (locInput) locInput.value = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+          try { if (placeInput) placeInput.value = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`; } catch (e) {}
+          (async () => {
+            try {
+              const rev = await nominatimReverse(pos.lat, pos.lng);
+              const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
+              if (locInput && display) locInput.value = display;
+              try { if (placeInput && display) placeInput.value = display; } catch (e) {}
+              try { chosenPlace = { lat: pos.lat, lon: pos.lng, display_name: display }; } catch (e) {}
+              // Use chained popup API and open popup on the marker to show the selected address
+              try {
+                if (marker && display) {
+                  marker.bindPopup(display, { closeButton: true }).openPopup();
+                }
+              } catch (e) {}
+            } catch (e) { /* ignore reverse failures */ }
+          })();
         });
 
+  // Report marker layer + clustering + viewport fetching + caching
+  let reportLayer = null;
+  const createReportLayer = () => {
+    if (reportLayer) return reportLayer;
+    if (window.L && typeof L.markerClusterGroup === 'function') {
+      try {
+          // Custom cluster icon to match marker look and feel
+          // disable zoomToBoundsOnClick so we can intercept cluster clicks and
+          // show a popup listing child reports instead of zooming automatically.
+          reportLayer = L.markerClusterGroup({
+            iconCreateFunction: function(cluster) {
+              const count = cluster.getChildCount();
+              return L.divIcon({
+                html: '<div class="gomk-cluster">' + count + '</div>',
+                className: 'gomk-cluster-wrapper',
+                iconSize: L.point(40, 40)
+              });
+            },
+            zoomToBoundsOnClick: false,
+            // Make clusters more likely by increasing pixel radius used to group markers
+            maxClusterRadius: 120
+          });
+      } catch (e) { reportLayer = L.layerGroup(); }
+    } else {
+      reportLayer = L.layerGroup();
+    }
+    reportLayer.addTo(map);
+
+      // When a cluster is clicked, show a popup listing children with links
+      // to open the report modal. This avoids auto-zoom behavior and gives
+      // users a quick way to view reports in that cluster.
+      try {
+        reportLayer.on('clusterclick', (ev) => {
+          try {
+            const cluster = ev.layer;
+            const children = cluster.getAllChildMarkers();
+            if (!children || !children.length) return;
+            // Build a list HTML (limit to 12 entries to avoid huge popups)
+            const max = 12;
+            const items = children.slice(0, max).map((cm) => {
+              const d = cm.__reportData || (cm.options && cm.options.__reportData) || {};
+              const id = d.id || (d.data && d.data.id) || cm.reportId || '';
+              const title = d.title || d.display_name || d.name || 'Report';
+              return '<div class="gomk-cluster-item"><strong>' + escapeHtml(String(title)) + '</strong> <a href="#" class="gomk-view-report" data-id="' + escapeHtml(String(id)) + '">View</a></div>';
+            });
+            if (children.length > max) items.push('<div class="gomk-cluster-item">+' + (children.length - max) + ' more…</div>');
+            const html = '<div class="gomk-cluster-popup">' + items.join('') + '</div>';
+            L.popup({ maxWidth: 360 }).setLatLng(cluster.getLatLng()).setContent(html).openOn(map);
+          } catch (e) { console.warn('Cluster click render failed', e); }
+        });
+      } catch (e) {}
+    return reportLayer;
+  };
+
+  const renderMarkers = (reports) => {
+    const layer = createReportLayer();
+    if (layer.clearLayers) layer.clearLayers();
+    reports.forEach(r => {
+      const lat = parseFloat(r.latitude || r.lat || 0);
+      const lng = parseFloat(r.longitude || r.lon || 0);
+      if (!lat || !lng) return;
+      const color = (r.status && String(r.status).toLowerCase() === 'resolved') ? '#2e8b57' : '#d84545';
+      // Use a small divIcon so markers match the visual style of clusters
+      const icon = L.divIcon({
+        className: 'gomk-marker-wrapper',
+        html: '<span class="gomk-marker" style="background:' + color + '"></span>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+      const m = L.marker([lat, lng], { icon });
+      try {
+        const title = r.title || r.display_name || r.name || 'Report location';
+        const meta = [];
+        if (r.category) meta.push(String(r.category));
+        if (r.status) meta.push(String(r.status));
+        const popupHtml = '<strong>' + escapeHtml(String(title)) + '</strong>' + (meta.length ? '<br>' + escapeHtml(meta.join(' · ')) : '');
+        m.bindPopup(popupHtml, { closeButton: true });
+        // Attach the report payload to marker for later reference (used by cluster popup links)
+        try { m.__reportData = r; m.reportId = r.id; } catch (e) {}
+        // Open popup on click only (remove hover behavior per request)
+        m.on && m.on('click', () => { try { m.openPopup(); } catch (e) {} });
+      } catch (e) {}
+      layer.addLayer(m);
+      try { m.__reportData = r; m.reportId = r.id; reportCache.set(r.id, { data: r, marker: m }); } catch (e) {}
+    });
+  };
+
+  // Maintain an in-memory cache of loaded report IDs to avoid re-adding markers
+  const reportCache = new Map();
+
+  // Add a marker for a single report and register it in the cache
+  const addMarker = (r) => {
+    try {
+      const layer = createReportLayer();
+      const lat = parseFloat(r.latitude || r.lat || 0);
+      const lng = parseFloat(r.longitude || r.lon || 0);
+      if (!lat || !lng) return;
+      const color = (r.status && String(r.status).toLowerCase() === 'resolved') ? '#2e8b57' : '#d84545';
+      const icon = L.divIcon({
+        className: 'gomk-marker-wrapper',
+        html: '<span class="gomk-marker" style="background:' + color + '"></span>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+      const m = L.marker([lat, lng], { icon });
+      try {
+        const title = r.title || r.display_name || r.name || '';
+        const meta = [];
+        if (r.category) meta.push(String(r.category));
+        if (r.status) meta.push(String(r.status));
+        const popupHtml = title ? ('<strong>' + escapeHtml(String(title)) + '</strong>' + (meta.length ? '<br>' + escapeHtml(meta.join(' · ')) : '')) : (r.display_name || '');
+        m.bindPopup(popupHtml);
+        try { m.__reportData = r; m.reportId = r.id; } catch (e) {}
+        // Open popup on click only (remove hover behavior per request)
+        m.on && m.on('click', () => { try { m.openPopup(); } catch (e) {} });
+      } catch (e) {}
+      layer.addLayer(m);
+      reportCache.set(r.id, { data: r, marker: m });
+    } catch (e) { /* ignore marker errors */ }
+  };
+
+  // Add only new markers from server response (no duplicates)
+  function updateMarkers(items) {
+    if (!Array.isArray(items)) return;
+    items.forEach(item => {
+      if (!item || typeof item.id === 'undefined') return;
+      if (!reportCache.has(item.id)) {
+        addMarker(item);
+      }
+    });
+  }
+
+  // Initial fetch on load and subsequent fetches when the map stops moving.
+  const fetchForBounds = async () => {
+    try {
+      if (!map) return;
+      const bounds = map.getBounds();
+      const params = {
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest()
+      };
+  const url = `api/get_reports.php?north=${params.north}&south=${params.south}&east=${params.east}&west=${params.west}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json || !json.success || !Array.isArray(json.data)) return;
+      updateMarkers(json.data);
+    } catch (e) {
+      console.warn('Failed to fetch reports for bounds', e);
+    }
+  };
+
+  try { fetchForBounds(); } catch (e) {}
+  map.on && map.on('moveend', () => { try { fetchForBounds(); } catch (e) {} });
+
+  // When a popup is opened on the map (either for a cluster or marker),
+  // wire up any "View" links inside it so they open the report modal.
+  try {
+    map.on && map.on('popupopen', (evt) => {
+      try {
+        const popupEl = evt.popup && evt.popup.getElement ? evt.popup.getElement() : null;
+        if (!popupEl) return;
+        // Attach delegated click handler for view links inside the popup
+        const links = popupEl.querySelectorAll('.gomk-view-report');
+        links.forEach((ln) => {
+          ln.addEventListener('click', (ev) => {
+            try {
+              ev.preventDefault();
+              const id = ln.dataset && ln.dataset.id ? ln.dataset.id : ln.getAttribute('data-id');
+              if (!id) return;
+              // Look up cached report and open modal
+              const entry = reportCache.get(Number(id));
+              if (entry && entry.data) {
+                openReportInModal(entry.data);
+                // close the popup so modal is focused
+                try { map.closePopup(); } catch (e) {}
+                return;
+              }
+              // Fallback: try fetching full report via reports_list endpoint (by loading all and matching id)
+              (async () => {
+                try {
+                  const r = await fetch('api/reports_list.php').then(res => res.json()).then(j => j && j.data ? j.data.find(x => String(x.id) === String(id)) : null);
+                  if (r) openReportInModal(r);
+                } catch (e) { console.warn('Failed to fetch report for id', id, e); }
+              })();
+            } catch (e) {}
+          });
+        });
+      } catch (e) {}
+    });
+  } catch (e) {}
+
         // Clicking the map places the marker and reverse-geocodes
-        map.on('click', async (e) => {
+        map.on('click', (e) => {
           try {
             const lat = e.latlng.lat;
             const lon = e.latlng.lng;
@@ -2147,13 +2541,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const locInput = document.getElementById('location');
             if (latIn) latIn.value = lat;
             if (lngIn) lngIn.value = lon;
-            const rev = await nominatimReverse(lat, lon);
-            const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
-            if (locInput && display) locInput.value = display;
-            try { if (placeInput && display) placeInput.value = display; } catch (e) {}
-            try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
-            try { if (display) marker.bindPopup(display).openPopup(); } catch (e) {}
-            try { chosenPlace = { lat: lat, lon: lon, display_name: display }; } catch (e) {}
+            if (locInput) locInput.value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            // Reverse geocode asynchronously and update when ready
+            (async () => {
+              try {
+                const rev = await nominatimReverse(lat, lon);
+                const display = rev && (rev.display_name || (rev.address && Object.values(rev.address).join(', '))) ? (rev.display_name || '') : '';
+                if (locInput && display) locInput.value = display;
+                try { if (placeInput && display) placeInput.value = display; } catch (e) {}
+                try { chosenPlace = { lat: lat, lon: lon, display_name: display }; } catch (e) {}
+                // Show popup for the main marker when user clicks the map
+                try {
+                  if (marker && display) {
+                    marker.bindPopup(display, { closeButton: true }).openPopup();
+                  }
+                } catch (e) {}
+              } catch (e) { /* ignore */ }
+            })();
           } catch (e) { /* ignore */ }
         });
       } catch (e) {
@@ -2162,7 +2566,44 @@ document.addEventListener('DOMContentLoaded', () => {
       return map;
     };
 
-    const openModal = () => {
+    // Helper to present a report object in the existing report modal.
+    const openReportInModal = (reportObj) => {
+      try {
+        // Build a temporary element that mimics the .report-card dataset used by openModal
+        const fake = document.createElement('div');
+        fake.dataset.title = reportObj.title || reportObj.name || '';
+        fake.dataset.summary = reportObj.summary || reportObj.description || '';
+        fake.dataset.reporter = reportObj.reporter || 'Resident';
+        fake.dataset.location = reportObj.location || '';
+        fake.dataset.category = reportObj.category || '';
+        // Compute statusLabel and modifier (basic mapping similar to PHP helper)
+        const st = String(reportObj.status || '').toLowerCase();
+        const label = (st === 'in_progress' || st === 'in-progress') ? 'In progress' : (st === 'solved' || st === 'resolved' ? 'Solved' : 'Unresolved');
+        const modifier = (st === 'in_progress' || st === 'in-progress') ? 'in-progress' : (st === 'solved' || st === 'resolved' ? 'solved' : 'unresolved');
+        fake.dataset.statusLabel = label;
+        fake.dataset.statusModifier = modifier;
+        fake.dataset.submitted = reportObj.submitted_at || reportObj.created_at || '';
+        fake.dataset.image = reportObj.image || reportObj.image_path || '';
+        // Call the global modal opener defined earlier in script
+        try { openModal && typeof openModal === 'function' ? openModal(fake) : null; } catch (e) { console.warn(e); }
+      } catch (e) { console.warn('openReportInModal failed', e); }
+    };
+
+    // Expose a simple helper to open the map modal focused on a lat/lng from other UI (e.g. report cards)
+    try {
+      window.__gomkOpenMapAt = (lat, lng, displayName) => {
+        try {
+          if (!lat || !lng) return;
+          // ensure chosenPlace is set in this closure scope and then open map modal
+          if (typeof chosenPlace !== 'undefined') {
+            chosenPlace = { lat: Number(lat), lon: Number(lng), display_name: displayName || '' };
+          }
+          if (typeof openMapModal === 'function') openMapModal();
+        } catch (e) { console.warn('openMapAt failed', e); }
+      };
+    } catch (e) {}
+
+  const openMapModal = () => {
       if (!mapModal) return;
       mapModal.setAttribute('open', '');
       mapModal.style.display = 'flex';
@@ -2182,83 +2623,132 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (e) {}
         if (chosenPlace && marker) {
-          try { marker.setLatLng([chosenPlace.lat, chosenPlace.lon]); map.setView([chosenPlace.lat, chosenPlace.lon], 17); } catch (e) {}
+          try {
+            marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+            try {
+              const z = (map && typeof map.getMaxZoom === 'function') ? Math.min(map.getMaxZoom(), 16) : 16;
+              map.setView([chosenPlace.lat, chosenPlace.lon], z);
+              // Bind and open a popup for the selected report location so users
+              // see the marker's info immediately when map modal opens.
+              try {
+                const popupText = (chosenPlace.display_name || chosenPlace.name || '').toString();
+                if (marker && popupText) {
+                  marker.bindPopup(popupText, { closeButton: true }).openPopup();
+                } else if (marker) {
+                  // ensure a minimal popup is available
+                  marker.bindPopup('Report location', { closeButton: true }).openPopup();
+                }
+              } catch (e) { /* ignore popup errors */ }
+            } catch (e) {}
+          } catch (e) {}
         }
         // focus the place search input so users can type immediately
         try { if (placeInput) { placeInput.focus(); placeInput.select && placeInput.select(); } } catch (e) {}
       }, 80);
     };
 
-    const closeModal = () => {
+  const closeMapModal = () => {
       if (!mapModal) return;
       mapModal.removeAttribute('open');
       mapModal.style.display = 'none';
       document.body.classList.remove('modal-open');
     };
 
-    locationField.addEventListener('click', openModal);
+  if (locationField) {
+    locationField.addEventListener('click', openMapModal);
+  }
 
-    mapModalClose?.addEventListener('click', closeModal);
-    mapModal.addEventListener('click', (ev) => { if (ev.target === mapModal) closeModal(); });
+  mapModalClose?.addEventListener('click', closeMapModal);
+  mapModal.addEventListener('click', (ev) => { if (ev.target === mapModal) closeMapModal(); });
 
     // Nominatim search helper (public) — consider swapping to LocationIQ if you have a token
+    // Simple in-memory caches to reduce repeat Nominatim requests
+    const nominatimSearchCache = new Map();
+    const nominatimReverseCache = new Map();
+
+    // AbortController used to cancel in-flight search requests when the user types again
+    let nominatimSearchController = null;
     const nominatimSearch = async (q) => {
-      // Include an email parameter per Nominatim usage policy so the service can contact you if needed.
-      const email = 'noreply@gomarikina.local';
-  // Marikina viewbox: left(lon)=121.02, top(lat)=14.76, right(lon)=121.16, bottom(lat)=14.57
-  const viewbox = '121.02,14.76,121.16,14.57';
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=1&limit=5&countrycodes=ph&viewbox=${encodeURIComponent(viewbox)}&bounded=1&email=${encodeURIComponent(email)}`;
-      // Retry a couple times for transient network or 429 issues
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      if (!q) return [];
+      if (nominatimSearchCache.has(q)) return nominatimSearchCache.get(q);
+      // Build proxy URL (server-side proxy handles caching and rate limits)
+      const viewbox = '121.02,14.76,121.16,14.57';
+  const url = `api/geocode_proxy.php?action=search&q=${encodeURIComponent(q)}&viewbox=${encodeURIComponent(viewbox)}&limit=5`;
+      // Abort previous controller if present
+      try { if (nominatimSearchController) { try { nominatimSearchController.abort(); } catch (e) {} } } catch (e) {}
+      nominatimSearchController = new AbortController();
+      const signal = nominatimSearchController.signal;
+
+      const maxAttempts = 2;
+      let attempt = 0;
+      while (attempt < maxAttempts) {
+        attempt += 1;
         try {
-          console.debug('nominatimSearch attempt', attempt, url);
-          const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+          const r = await fetch(url, { signal });
           if (!r.ok) {
-            console.warn('Nominatim search returned status', r.status);
-            // If it's a client error (4xx other than 429) don't retry
-            if (r.status >= 400 && r.status < 500 && r.status !== 429) return [];
-            // otherwise retry once
-            if (attempt === 2) return [];
-            await new Promise(res => setTimeout(res, 250 * attempt));
-            continue;
+            console.warn('Geocode proxy returned status', r.status);
+            if (r.status === 429) {
+              (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Geocoding rate limit reached — please wait', { type: 'warning' }) : null;
+              break; // don't retry on rate-limit
+            }
+            // Retry for 5xx/502 transient errors
+            if (attempt < maxAttempts) {
+              await new Promise(res => setTimeout(res, 300 * attempt));
+              continue;
+            }
+            return [];
           }
           const body = await r.json().catch(() => null);
-          console.debug('nominatimSearch response', body);
-          return Array.isArray(body) ? body : [];
+          // TEMP DEBUG: log raw geocode proxy response for diagnosis
+          try { console.debug('geocode proxy raw body', body); } catch (e) {}
+          // Support multiple response shapes:
+          // - LocationIQ primary wrapper: { value: [...] }
+          // - Raw array from Nominatim/LocationIQ: [ ... ]
+          // - Some services: { data: [...] } or { results: [...] }
+          let arr = [];
+          if (Array.isArray(body)) arr = body;
+          else if (body && Array.isArray(body.value)) arr = body.value;
+          else if (body && Array.isArray(body.data)) arr = body.data;
+          else if (body && Array.isArray(body.results)) arr = body.results;
+          else arr = [];
+          try { console.debug('geocode proxy normalized arr', arr); } catch (e) {}
+          try { nominatimSearchCache.set(q, arr); } catch (e) {}
+          return arr;
         } catch (e) {
-          console.warn('Nominatim search error (attempt ' + attempt + ')', e);
-          if (attempt === 2) throw e;
-          await new Promise(res => setTimeout(res, 250 * attempt));
+          if (e.name === 'AbortError') return [];
+          console.warn('Geocode proxy error', e);
+          if (attempt < maxAttempts) {
+            // small backoff then retry once
+            await new Promise(res => setTimeout(res, 300 * attempt));
+            continue;
+          }
+          (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Search failed — try again', { type: 'error' }) : null;
+          return [];
         }
       }
+      // ensure controller is cleared
+      nominatimSearchController = null;
       return [];
     };
 
     // Reverse geocode (lat,lng) to a display name using Nominatim
     const nominatimReverse = async (lat, lon) => {
-      const email = 'noreply@gomarikina.local';
-      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&email=${encodeURIComponent(email)}`;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.debug('nominatimReverse attempt', attempt, url);
-          const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-          if (!r.ok) {
-            console.warn('Nominatim reverse returned status', r.status);
-            if (r.status >= 400 && r.status < 500 && r.status !== 429) return null;
-            if (attempt === 2) return null;
-            await new Promise(res => setTimeout(res, 250 * attempt));
-            continue;
-          }
-          const body = await r.json().catch(() => null);
-          console.debug('nominatimReverse response', body);
-          return body;
-        } catch (e) {
-          console.warn('Nominatim reverse error (attempt ' + attempt + ')', e);
-          if (attempt === 2) return null;
-          await new Promise(res => setTimeout(res, 250 * attempt));
+      const key = `${lat},${lon}`;
+      if (nominatimReverseCache.has(key)) return nominatimReverseCache.get(key);
+  const url = `api/geocode_proxy.php?action=reverse&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+      try {
+        const r = await fetch(url);
+        if (!r.ok) {
+          console.warn('Geocode proxy reverse returned', r.status);
+          return null;
         }
+        const body = await r.json().catch(() => null);
+        try { nominatimReverseCache.set(key, body); } catch (e) {}
+        return body;
+      } catch (e) {
+        console.warn('Geocode proxy reverse error', e);
+        return null;
       }
-      return null;
     };
 
     // Simple autocomplete dropdown for the search input with keyboard support
@@ -2274,6 +2764,10 @@ document.addEventListener('DOMContentLoaded', () => {
         list.style.position = 'absolute';
         list.style.zIndex = 2000;
         list.style.minWidth = (placeInput ? placeInput.offsetWidth : 240) + 'px';
+        // Reset margins so CSS margins (which add offsets) don't move the
+        // absolutely-positioned element. We'll control max-width in showResults.
+        list.style.margin = '0';
+        list.style.maxWidth = 'none';
         list.style.boxSizing = 'border-box';
         document.body.appendChild(list);
       }
@@ -2294,9 +2788,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const rect = placeInput.getBoundingClientRect();
   const scrollX = window.scrollX || window.pageXOffset || 0;
   const scrollY = window.scrollY || window.pageYOffset || 0;
-  list.style.left = (rect.left + scrollX) + 'px';
+  // Ensure the results container doesn't add external margins and limit
+  // its maximum width to the input width so centering math is consistent.
+  list.style.margin = '0';
+  list.style.maxWidth = rect.width + 'px';
+  // Set width to auto first, then measure the effective width (which will
+  // respect the inline maxWidth we just applied). Finally compute left so
+  // the dropdown is centered under the input.
+  list.style.width = 'auto';
+  // Force reflow to ensure offsetWidth reflects applied styles
+  const effectiveWidth = (list.offsetWidth || rect.width);
+  const left = rect.left + scrollX + Math.max(0, (rect.width - effectiveWidth) / 2);
+  list.style.left = left + 'px';
   list.style.top = (rect.bottom + scrollY) + 'px';
-  list.style.width = rect.width + 'px';
       list.innerHTML = '';
 
       items.forEach((it, idx) => {
@@ -2323,7 +2827,19 @@ document.addEventListener('DOMContentLoaded', () => {
       ensureMap();
       try {
         marker.setLatLng([parseFloat(it.lat), parseFloat(it.lon)]);
-        map.setView([parseFloat(it.lat), parseFloat(it.lon)], 17);
+        try {
+          // Update main marker popup content but don't auto-open it
+          const content = it.display_name || it.name || '';
+          if (marker.getPopup && marker.getPopup()) {
+            marker.getPopup().setContent(content);
+          } else {
+            marker.bindPopup(content);
+          }
+        } catch (e) {}
+        try {
+          const z = (map && typeof map.getMaxZoom === 'function') ? Math.min(map.getMaxZoom(), 16) : 16;
+          map.setView([parseFloat(it.lat), parseFloat(it.lon)], z);
+        } catch (e) {}
       } catch (e) {}
       const latIn = document.getElementById('location_lat');
       const lngIn = document.getElementById('location_lng');
@@ -2331,8 +2847,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (latIn) latIn.value = it.lat;
   if (lngIn) lngIn.value = it.lon;
   if (locInput) locInput.value = it.display_name || '';
-  try { marker.unbindPopup && marker.unbindPopup(); } catch (e) {}
-  try { if (it.display_name) marker.bindPopup(it.display_name).openPopup(); } catch (e) {}
+  // Popups disabled for markers (no bind/unbind) to keep UI clean and reduce resource usage.
       clearResults();
       placeInput.value = it.display_name || '';
     };
@@ -2343,14 +2858,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const q = (ev.target.value || '').trim();
         if (searchTimer) clearTimeout(searchTimer);
         if (!q) { clearResults(); return; }
-        searchTimer = setTimeout(async () => {
+  searchTimer = setTimeout(async () => {
           try {
             const res = await nominatimSearch(q);
             showResults(Array.isArray(res) ? res : []);
           } catch (e) {
             (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Search failed — try again', { type: 'error' }) : console.warn(e);
           }
-        }, 300);
+  }, 350);
       });
 
       // keyboard navigation

@@ -1,0 +1,13 @@
+# Ignore local config that contains API keys
+config/geocode_keys.php
+
+# Ignore geocode cache
+api/.cache_geocode/
+
+# Ignore uploads (may contain user photos)
+uploads/
+
+# OS / IDE files
+.vscode/
+Thumbs.db
+desktop.ini

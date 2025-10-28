@@ -168,12 +168,12 @@ if (!function_exists('summarize_location')) {
     /**
      * Produce a short, human-friendly summary for long location strings.
      * Strategy:
-     *  - Split on commas and keep the first N components (default 3).
+     *  - Split on commas and keep the first N components (default 2 for tighter cards).
      *  - Trim and join with commas. If the result is still longer than
      *    $maxLen, truncate with an ellipsis.
      *  - If the original had more components than kept, append an ellipsis.
      */
-    function summarize_location(?string $location, int $parts = 3, int $maxLen = 80): string
+    function summarize_location(?string $location, int $parts = 2, int $maxLen = 40): string
     {
         $location = trim((string)$location);
         if ($location === '') {

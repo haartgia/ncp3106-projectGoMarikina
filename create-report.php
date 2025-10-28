@@ -131,6 +131,13 @@ require __DIR__ . '/config/auth.php';
                     <div class="crop-info">
                         <span>Drag to move; drag edges/corners to resize</span>
                     </div>
+                    <div class="crop-mode">
+                        <label class="crop-mode-label">Orientation:</label>
+                        <div class="crop-mode-options">
+                            <button type="button" class="crop-mode-btn" id="cropModePortrait" aria-pressed="false">Portrait</button>
+                            <button type="button" class="crop-mode-btn" id="cropModeLandscape" aria-pressed="false">Landscape</button>
+                        </div>
+                    </div>
                     <div class="crop-buttons">
                         <button type="button" class="btn-cancel" id="cropCancel">Cancel</button>
                         <button type="button" class="btn-crop" id="cropConfirm">Crop Photo</button>

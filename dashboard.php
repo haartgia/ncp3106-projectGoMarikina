@@ -270,7 +270,7 @@ $barangays = [
                             </p>
                         </div>
                         <p class="city-metric-description">
-                            River gauges reporting by alert level (1–3): L1 Gutter‑deep · L2 Knee‑deep · L3 Waist‑deep.
+                            River gauges reporting by alert level — L1 Gutter‑deep, L2 Knee‑deep, L3 Waist‑deep.
                         </p>
                         <div class="city-metric-footer">
                             <div class="city-metric-sparkline">

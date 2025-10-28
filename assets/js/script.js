@@ -1870,6 +1870,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cropping functionality (free crop with resize handles)
   let cropImage = null;
   let cropBox = null;
+  // cropMode: null = free, 'portrait' or 'landscape'
+  let cropMode = null;
+  // display size of image on canvas (used to re-init crop box)
+  let cropDisplayWidth = 0;
+  let cropDisplayHeight = 0;
   let isDragging = false;      // moving the box
   let isResizing = false;      // resizing via handles
   let resizeDir = null;        // which handle is active
@@ -1895,6 +1900,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // Set display size
           canvas.style.width = Math.round(img.width * scale) + 'px';
           canvas.style.height = Math.round(img.height * scale) + 'px';
+
+          // remember display size for re-init when mode changes
+          cropDisplayWidth = Math.round(img.width * scale);
+          cropDisplayHeight = Math.round(img.height * scale);
           
           // Set actual canvas size to match original image
           canvas.width = img.width;
@@ -1904,7 +1913,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ctx.drawImage(img, 0, 0);
           
           // Initialize crop box with scaled dimensions (freeform, ~80% of display size)
-          initializeCropBox(img.width * scale, img.height * scale);
+          initializeCropBox(cropDisplayWidth, cropDisplayHeight);
           cropImage = img;
         };
         img.src = imageSrc;
@@ -1916,9 +1925,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cropBoxElement) return;
         
         cropBoxElement.innerHTML = '';
-        // Free crop: start with a large centered box (80% of area)
+        // Start with a large centered box (80% of area) or respect selected orientation
         let cropWidth = imageWidth * 0.8;
         let cropHeight = imageHeight * 0.8;
+        if (cropMode === 'portrait' || cropMode === 'landscape') {
+          const aspect = (cropMode === 'landscape') ? (4/3) : (3/4);
+          // Decide whether to fit by width or height depending on image shape
+          if ((imageWidth / imageHeight) >= aspect) {
+            // image is wider than target aspect -> use height to base size
+            cropHeight = imageHeight * 0.8;
+            cropWidth = Math.min(imageWidth, Math.round(cropHeight * aspect));
+          } else {
+            // image is taller than target aspect -> use width to base size
+            cropWidth = imageWidth * 0.8;
+            cropHeight = Math.min(imageHeight, Math.round(cropWidth / aspect));
+          }
+        }
         
         // Center the crop box
         const left = (imageWidth - cropWidth) / 2;
@@ -2024,6 +2046,34 @@ document.addEventListener('DOMContentLoaded', () => {
           case 'w':  w += x - px; x = px; break;
         }
 
+        // If an orientation mode is active, enforce aspect ratio
+        if (cropMode === 'portrait' || cropMode === 'landscape') {
+          const aspect = (cropMode === 'landscape') ? (4/3) : (3/4);
+          // For corner handles, drive height from width
+          if (['nw','ne','se','sw'].includes(resizeDir)) {
+            h = Math.round(w / aspect);
+            // If height overflowed, adjust width instead
+            if (h + y > rect.height) {
+              h = rect.height - y;
+              w = Math.round(h * aspect);
+            }
+          } else if (resizeDir === 'n' || resizeDir === 's') {
+            // vertical handles - height driven by pointer, width computed
+            w = Math.round(h * aspect);
+            if (w + x > rect.width) {
+              w = rect.width - x;
+              h = Math.round(w / aspect);
+            }
+          } else if (resizeDir === 'e' || resizeDir === 'w') {
+            // horizontal handles - width driven by pointer, height computed
+            h = Math.round(w / aspect);
+            if (h + y > rect.height) {
+              h = rect.height - y;
+              w = Math.round(h * aspect);
+            }
+          }
+        }
+
         // Constrain within area
         if (x < 0) { w += x; x = 0; }
         if (y < 0) { h += y; y = 0; }
@@ -2068,6 +2118,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cropClose) cropClose.addEventListener('click', hideCropModal);
       if (cropCancel) cropCancel.addEventListener('click', hideCropModal);
       if (cropConfirm) cropConfirm.addEventListener('click', confirmCrop);
+
+      // Crop orientation buttons
+      const cropModePortraitBtn = document.getElementById('cropModePortrait');
+      const cropModeLandscapeBtn = document.getElementById('cropModeLandscape');
+      function setCropMode(mode) {
+        cropMode = (mode === cropMode) ? null : mode;
+        // update active state on buttons
+        try {
+          if (cropModePortraitBtn) cropModePortraitBtn.classList.toggle('active', cropMode === 'portrait');
+          if (cropModeLandscapeBtn) cropModeLandscapeBtn.classList.toggle('active', cropMode === 'landscape');
+          if (cropModePortraitBtn) cropModePortraitBtn.setAttribute('aria-pressed', cropMode === 'portrait');
+          if (cropModeLandscapeBtn) cropModeLandscapeBtn.setAttribute('aria-pressed', cropMode === 'landscape');
+        } catch (e) {}
+        // reinitialize crop box to respect new aspect
+        try { if (cropImage && cropDisplayWidth && cropDisplayHeight) initializeCropBox(cropDisplayWidth, cropDisplayHeight); } catch (e) {}
+      }
+      if (cropModePortraitBtn) cropModePortraitBtn.addEventListener('click', () => setCropMode('portrait'));
+      if (cropModeLandscapeBtn) cropModeLandscapeBtn.addEventListener('click', () => setCropMode('landscape'));
 
       function hideCropModal() {
         const modal = document.getElementById('cropModal');
@@ -2952,7 +3020,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (latIn) latIn.value = chosenPlace.lat || '';
       if (lngIn) lngIn.value = chosenPlace.lon || '';
       const evt = new Event('change', { bubbles: true }); locInput?.dispatchEvent(evt);
-      closeModal();
+      // Close the map modal (use the map-specific close function)
+      try { if (typeof closeMapModal === 'function') closeMapModal(); else closeModal && closeModal(); } catch (e) { /* ignore */ }
     });
 
     // Clear selection
@@ -3029,45 +3098,46 @@ document.addEventListener('DOMContentLoaded', () => {
           passwordField.focus();
 
           // Inject confirm password input BELOW the first input (not beside)
+          // Instead of absolutely positioning the confirm field (which kept it
+          // visually outside the card), insert it into the normal document flow
+          // so the parent card grows naturally when editing begins.
           const group = passwordField.closest('.profile-input-group') || passwordField.parentElement;
           const fieldContainer = group?.parentElement || null; // typically .profile-field
           if (group && fieldContainer && !document.getElementById('passwordConfirmField')) {
-            // Ensure the input and its edit button stay on one line
             try { group.style.flexWrap = 'nowrap'; } catch (e) { /* ignore */ }
-            // Position the confirm group absolutely so it doesn't affect layout of siblings
-            fieldContainer.style.position = fieldContainer.style.position || 'relative';
             const wrap = document.createElement('div');
             wrap.className = 'profile-input-group profile-input-group--confirm';
             wrap.id = 'passwordConfirmWrap';
-            wrap.style.position = 'absolute';
-            wrap.style.left = group.offsetLeft + 'px';
-            wrap.style.width = group.offsetWidth + 'px';
-            wrap.style.zIndex = '5';
-            // layout confirm input and its toggle side by side
+            // Keep the confirm input in the normal flow so the card expands
+            wrap.style.position = 'relative';
             wrap.style.display = 'grid';
             wrap.style.gridTemplateColumns = '1fr auto';
             wrap.style.alignItems = 'center';
-            const computeTop = () => {
+            wrap.style.marginTop = '8px';
+            // Match the width and horizontal offset of the original input group
+            // so the confirm input appears exactly the same width as the
+            // "Enter new password" field.
+            // Append the confirm wrapper to the card body and size/offset it so it
+            // lines up exactly below the original password input. Using the
+            // card body keeps the wrapper in-flow so the card expands naturally.
+            const cardBody = passwordField.closest('.profile-card-body') || fieldContainer;
+            cardBody.appendChild(wrap);
+            const computePosition = () => {
               try {
-                const rect = group.getBoundingClientRect();
-                const parentRect = fieldContainer.getBoundingClientRect();
-                const top = rect.top - parentRect.top + group.offsetHeight + 8; // 8px gap
-                wrap.style.top = top + 'px';
-              } catch (e) {
-                wrap.style.top = (group.offsetTop + group.offsetHeight + 8) + 'px';
-              }
-            };
-            computeTop();
-            // Recompute on resize while visible (keep horizontally aligned with the input)
-            const onResize = () => {
-              try {
-                wrap.style.left = group.offsetLeft + 'px';
-                wrap.style.width = group.offsetWidth + 'px';
+                const groupRect = group.getBoundingClientRect();
+                const cardRect = cardBody.getBoundingClientRect();
+                const left = Math.max(0, Math.round(groupRect.left - cardRect.left));
+                wrap.style.width = Math.round(groupRect.width) + 'px';
+                wrap.style.marginLeft = left + 'px';
+                wrap.style.boxSizing = 'border-box';
               } catch (e) { /* ignore */ }
-              computeTop();
             };
+            computePosition();
+            const onResize = () => computePosition();
             window.addEventListener('resize', onResize);
             wrap._onResize = onResize;
+            // Trigger the open animation on the next tick
+            requestAnimationFrame(() => wrap.classList.add('is-open'));
             const confirm = document.createElement('input');
             confirm.type = 'password';
             confirm.className = 'profile-input';
@@ -3099,8 +3169,9 @@ document.addEventListener('DOMContentLoaded', () => {
               };
               wrap.appendChild(makeToggle(confirm, 'passwordConfirmToggleBtn'));
             }
-            // Append to field container (absolute positioning avoids reflow)
-            fieldContainer.appendChild(wrap);
+            // If we appended into the card body fallback above, we already attached
+            // and stored a resize handler; ensure animation kicks in in all cases.
+            if (wrap.parentElement) requestAnimationFrame(() => wrap.classList.add('is-open'));
           }
 
           // Add a visibility toggle for the main password field (inline with input)

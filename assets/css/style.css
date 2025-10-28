@@ -2139,6 +2139,16 @@ body.modal-open {
   word-break: break-word;
 }
 
+/* Shorten long location strings in the report modal and show ellipsis after 3 lines */
+[data-report-modal-location] {
+  display: -webkit-box;
+  line-clamp: 3;
+  -webkit-line-clamp: 3; /* change to 2 if you prefer shorter */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .report-modal__summary h4 {
   font-size: 1.05rem;
   margin-bottom: 10px;
@@ -2162,7 +2172,8 @@ body.modal-open {
   box-shadow: 0 28px 60px -34px rgba(7, 21, 52, 0.5);
   aspect-ratio: 16 / 9;
   display: flex;
-  align-items: stretch;
+  /* center media content vertically by default; portrait layout will override to top-align */
+  align-items: center;
 }
 
 .report-modal__media img {
@@ -2170,6 +2181,8 @@ body.modal-open {
   height: 100%;
   display: block;
   object-fit: cover;
+  /* ensure the focal point is centered when object-fit crops the image */
+  object-position: center center;
 }
 
 /* Portrait-image modal layout: when the dialog has this modifier the
@@ -3176,6 +3189,25 @@ body.nav-open .nav-scrim {
 .aspect-ratio {
   font-weight: 600;
   color: var(--sidebar-bg);
+}
+
+/* Crop mode buttons (portrait / landscape) */
+.crop-mode { display:flex; align-items:center; gap:12px; }
+.crop-mode-label { font-size:0.95rem; color:var(--text-muted); font-weight:600; }
+.crop-mode-options { display:flex; gap:8px; }
+.crop-mode-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+.crop-mode-btn.active {
+  background: var(--chip-blue);
+  color: var(--chip-blue-text);
+  border-color: var(--chip-blue);
 }
 
 .crop-buttons {
@@ -4584,7 +4616,10 @@ body.nav-open .nav-scrim {
 
 .city-metric-value {
   display: flex;
-  align-items: flex-end;
+  /* Align numbers and their units on the same text baseline so
+     single-digit values (like '0') line up consistently with
+     multi-digit or decimal values in neighboring cards. */
+  align-items: baseline;
   gap: 10px;
   font-size: clamp(2.2rem, 3.4vw, 2.8rem);
   font-weight: 700;
@@ -4599,11 +4634,23 @@ body.nav-open .nav-scrim {
   text-transform: uppercase;
 }
 
+/* Ensure the unit text aligns to the same baseline as the numeric value.
+   This prevents the unit from vertically misaligning small numbers. */
+.city-metric-unit { align-self: baseline; }
+
 .city-metric-description {
   font-size: 0.95rem;
   color: rgba(16, 32, 63, 0.6);
   line-height: 1.55;
   max-width: 340px;
+}
+
+/* Short single-line variant used for compact metric descriptions. Shows
+   ellipsis when the text is too long; full text available via title attribute. */
+.city-metric-description--short {
+  /* Left intentionally empty: exact truncation not needed now but kept
+     for potential future compact layouts. */
+  display: inline;
 }
 
 .city-metric-progress {
@@ -4631,6 +4678,9 @@ body.nav-open .nav-scrim {
 
 .city-metric-card--water {
   background: linear-gradient(145deg, rgba(14, 65, 179, 0.12), rgba(255, 255, 255, 0.92) 88%);
+  /* Force the water card to use the same card height baseline as the
+     other metric cards so it doesn't appear taller due to content flow. */
+  min-height: 210px;
 }
 
 .city-metric-card--water .city-metric-progress-bar {
@@ -5585,6 +5635,9 @@ body.nav-open .nav-scrim {
   border-radius: var(--radius-medium);
   box-shadow: var(--shadow-soft);
   padding: 24px;
+  /* Allow the card to grow to fit interactive content (forms, inputs,
+     modals inside) instead of clipping children with overflow:hidden */
+  overflow: visible;
 }
 .profile-card-header { margin-bottom: 18px; }
 .profile-card-header h3 { font-size: 1rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text-primary); }
@@ -5608,6 +5661,31 @@ body.nav-open .nav-scrim {
 .profile-edit-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: var(--radius-small); border: 1px solid var(--border-soft); color: var(--text-primary); background: #eff4fb; transition: background var(--transition), color var(--transition), border-color var(--transition); }
 .profile-edit-btn:hover { background: #eaf0f8; color: var(--text-primary); border-color: var(--border-soft); }
 .profile-edit-btn svg { width: 18px; height: 18px; }
+
+/* Confirm password row inserted when editing password. This sits full-width
+   at the bottom of the card and animates open using max-height for a smooth
+   slide-down effect. */
+.profile-input-group--confirm {
+  width: auto; /* allow JS to set explicit width to match the original input */
+  display: grid;
+  grid-template-columns: 1fr auto; /* input + toggle */
+  gap: 8px;
+  align-items: center;
+  overflow: hidden;
+  max-height: 0; /* collapsed */
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: max-height 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, transform 220ms ease;
+  margin-top: 12px;
+}
+.profile-input-group--confirm.is-open {
+  max-height: 220px; /* large enough to reveal the input */
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Make sure toggles inside the confirm group match visual style */
+.profile-input-group--confirm .auth-field-toggle { margin-left: 8px; }
 
 /* Profile hero panel (matches announcement style) */
 .profile-hero {

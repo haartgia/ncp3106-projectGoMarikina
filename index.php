@@ -393,7 +393,7 @@ try {
                     </div>
                 </dl>
                 <div class="report-modal__summary">
-                    <h4>Summary</h4>
+                    <h4>Decription</h4>
                     <p id="reportModalSummary" data-report-modal-summary>—</p>
                 </div>
                 <div class="report-modal__media" data-report-modal-media>

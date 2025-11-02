@@ -41,6 +41,63 @@ if (modal) {
             closeAnnouncementsModal();
         }
     });
+
+    // Initialize simple slide paginator inside announcements modal
+    const initAnnouncementsModalCarousel = () => {
+      const root = document.getElementById('announcementsModalCarousel');
+      if (!root) return;
+      const slides = Array.from(root.querySelectorAll('.ann-modal-slide'));
+      const dots = Array.from(root.querySelectorAll('.ann-indicator'));
+      if (!slides.length || !dots.length) return;
+      let index = slides.findIndex(s => s.classList.contains('active'));
+      if (index < 0) index = 0;
+      
+      const show = (i) => {
+        i = (i + slides.length) % slides.length;
+        if (i === index) return; // No change needed
+        
+        const oldSlide = slides[index];
+        const newSlide = slides[i];
+        
+        // Add exiting class to current slide for smooth animation
+        oldSlide.classList.add('slide-exiting');
+        
+        // Remove active from current slide after transition completes
+        setTimeout(() => {
+          oldSlide.classList.remove('active', 'slide-exiting');
+          oldSlide.setAttribute('aria-hidden', 'true');
+        }, 450); // Match CSS transition duration
+        
+        // Activate new slide immediately
+        newSlide.classList.add('active');
+        newSlide.setAttribute('aria-hidden', 'false');
+        
+        // Update indicators
+        dots.forEach((d, k) => { 
+          d.classList.toggle('active', k === i); 
+          if (k === i) d.setAttribute('aria-current','true'); 
+          else d.removeAttribute('aria-current'); 
+        });
+        
+        index = i;
+      };
+      
+      dots.forEach((btn, i) => btn.addEventListener('click', (ev) => { ev.preventDefault(); show(i); }));
+      // Keyboard support when modal focused
+      modal.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); show(index - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); show(index + 1); }
+      });
+      // Ensure first slide shown on open
+      show(index);
+    };
+
+    // Run after modal opens (minor delay to ensure DOM present)
+    modal.addEventListener('transitionend', (e) => {
+      if (e.target === modal && modal.hasAttribute('open')) {
+        initAnnouncementsModalCarousel();
+      }
+    });
 }
 
 /* --- Stylized toasts and confirm dialog (global helpers) --- */
@@ -232,18 +289,65 @@ document.addEventListener('DOMContentLoaded', () => {
       try { root.setAttribute('tabindex', '0'); } catch (e) { /* ignore */ }
     }
 
-    const show = (index) => {
+    // Helper to adjust carousel height smoothly
+    const adjustCarouselHeight = () => {
+      const activeItem = items.find(i => i.classList.contains('active'));
+      if (activeItem) {
+        // Force reflow to get accurate height
+        activeItem.style.display = 'block';
+        const height = activeItem.offsetHeight;
+        inner.style.height = height + 'px';
+      }
+    };
+
+    const show = (index, resetTimer = true) => {
       index = (index + items.length) % items.length;
-      items.forEach((it, i) => {
-        it.classList.toggle('active', i === index);
-        it.setAttribute('aria-hidden', i === index ? 'false' : 'true');
-      });
+      if (index === current) return; // No change needed
+      
+      // Reset auto-slide timer when manually navigating
+      if (resetTimer && autoSlideInterval) {
+        stopAutoSlide();
+        startAutoSlide();
+      }
+      
+      const oldItem = items[current];
+      const newItem = items[index];
+      
+      // Measure new item's height BEFORE transition starts
+      newItem.style.position = 'absolute';
+      newItem.style.visibility = 'hidden';
+      newItem.style.display = 'block';
+      const newHeight = newItem.offsetHeight;
+      newItem.style.position = '';
+      newItem.style.visibility = '';
+      newItem.style.display = '';
+      
+      // Set the target height immediately
+      inner.style.height = newHeight + 'px';
+      
+      // Add exiting class to current item for smooth animation
+      oldItem.classList.add('carousel-item-exiting');
+      
+      // Remove active from current item after transition completes
+      setTimeout(() => {
+        oldItem.classList.remove('active', 'carousel-item-exiting');
+        oldItem.setAttribute('aria-hidden', 'true');
+      }, 500); // Match CSS transition duration
+      
+      // Activate new item immediately
+      newItem.classList.add('active');
+      newItem.setAttribute('aria-hidden', 'false');
+      
+      // Update indicators
       indicators.forEach((btn, i) => {
         if (i === index) { btn.classList.add('active'); btn.setAttribute('aria-current', 'true'); }
         else { btn.classList.remove('active'); btn.removeAttribute('aria-current'); }
       });
       current = index;
     };
+    
+    // Set initial height
+    adjustCarouselHeight();
 
     // Prev / Next handlers (buttons removed, but keep for potential future use)
     btnPrev && btnPrev.addEventListener('click', (e) => { e.preventDefault(); show(current - 1); });
@@ -275,10 +379,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auto-slide functionality
     let autoSlideInterval = null;
     const startAutoSlide = () => {
-      // Get interval from data attribute or default to 5000ms
-      const interval = parseInt(root.getAttribute('data-bs-interval')) || 5000;
+      stopAutoSlide();
+      const interval = parseInt(root.getAttribute('data-bs-interval')) || 10000;
       autoSlideInterval = setInterval(() => {
-        show(current + 1);
+        show(current + 1, false);
       }, interval);
     };
 
@@ -293,10 +397,17 @@ document.addEventListener('DOMContentLoaded', () => {
     root.addEventListener('mouseenter', stopAutoSlide);
     root.addEventListener('mouseleave', startAutoSlide);
     inner.addEventListener('touchstart', stopAutoSlide);
-    inner.addEventListener('touchend', () => { setTimeout(startAutoSlide, 3000); });
+    inner.addEventListener('touchend', () => { setTimeout(startAutoSlide,10000); });
+
+    // Adjust height on window resize
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(adjustCarouselHeight, 150);
+    });
 
     // Ensure initial state and start auto-slide
-    show(current);
+    show(current, false); // Don't reset timer on initial load
     if (items.length > 1) {
       startAutoSlide();
     }
@@ -855,8 +966,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // EVENT LISTENERS FOR PAGE NAVIGATION
     // ========================================================================
 
-    // Initial setup
-    reinitialize();
+    // Initial setup with proper cleanup
+    // Force clean state on page load/refresh
+    if (reportsList) {
+      // Clear any residual styles from previous sessions
+      reportsList.classList.remove('gomk-masonry-active');
+      Array.from(reportsList.querySelectorAll('.report-card')).forEach((card) => {
+        card.style.removeProperty('width');
+        card.style.removeProperty('position');
+        card.style.removeProperty('top');
+        card.style.removeProperty('left');
+      });
+    }
+    
+    setTimeout(() => {
+      disable();
+      setTimeout(() => {
+        reinitialize();
+      }, 50);
+    }, 100);
+
+    // Also reinitialize on window load (after all resources are loaded)
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        verifyMasonry();
+        if (reportsList && reportsList.querySelectorAll('.report-card').length > 0) {
+          disable();
+          setTimeout(reinitialize, 100);
+        }
+      }, 150);
+    });
+
+    // Clean up before page unload to prevent stale state
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (masonry) {
+          disable();
+        }
+      } catch (e) { /* ignore */ }
+    });
 
     // Handle page visibility changes (tab switching, minimize/restore)
     document.addEventListener('visibilitychange', () => {
@@ -888,12 +1036,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Handle browser back/forward navigation (pageshow fires on cached pages)
-    window.addEventListener('pageshow', () => {
+    window.addEventListener('pageshow', (event) => {
       // Always reinitialize to handle browser cache scenarios
+      // Use longer delay for bfcache (back-forward cache) scenarios
+      const delay = event.persisted ? 150 : 50;
       setTimeout(() => {
         disable();
-        reinitialize();
-      }, 50);
+        setTimeout(() => {
+          reinitialize();
+        }, 50);
+      }, delay);
     });
 
     // Monitor DOM changes for layout issues
@@ -936,6 +1088,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalImage = reportModal.querySelector('[data-report-modal-image]');
   const modalPlaceholder = reportModal.querySelector('[data-report-modal-placeholder]');
     const modalBackdrop = reportModal.querySelector('[data-report-modal-backdrop]');
+  const mediaActions = reportModal.querySelector('[data-report-modal-actions]');
+  const openFullBtn = reportModal.querySelector('[data-report-open-full]');
+  const downloadBtn = reportModal.querySelector('[data-report-download]');
+  const imageViewer = reportModal.querySelector('[data-report-image-viewer]');
+  const imageViewerImg = reportModal.querySelector('[data-report-viewer-image]');
+  const imageViewerClose = reportModal.querySelector('[data-report-viewer-close]');
+
+  // Format a date string into 12-hour display like: "Nov 3, 2025 · 12:25 AM"
+  window.formatTo12hDisplay = function(input) {
+    try {
+      if (!input) return '—';
+      let s = String(input).trim();
+      // Try to normalize common "YYYY-MM-DD HH:MM[:SS]" into ISO by inserting 'T'
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(s)) {
+        s = s.replace(' ', 'T');
+      }
+      const d = new Date(s);
+      if (isNaN(d.getTime())) {
+        // If we already have an AM/PM formatted string, just return as-is
+        if (/[AP]M/i.test(s)) return s;
+        return s || '—';
+      }
+      const formatted = d.toLocaleString('en-US', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true
+      });
+      // Convert trailing comma before time into a middle dot separator
+      return formatted.replace(/,\s(?=\d)/, ' · ');
+    } catch (e) { return input || '—'; }
+  };
 
   let lastFocusedElement = null;
   let modalCloseTimer = null;
@@ -957,6 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       modalMediaContainer.classList.toggle('has-image', hasImage);
       modalMediaContainer.classList.toggle('no-image', !hasImage);
+      if (mediaActions) mediaActions.hidden = !hasImage;
 
       if (hasImage) {
         modalImage.src = imageUrl;
@@ -1025,7 +1208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title || 'Citizen report';
       }
       if (modalSubmitted) {
-        modalSubmitted.textContent = submitted || '—';
+        modalSubmitted.textContent = window.formatTo12hDisplay ? window.formatTo12hDisplay(submitted) : (submitted || '—');
       }
       if (modalReporter) {
         modalReporter.textContent = reporter || '—';
@@ -1105,6 +1288,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modalImage) {
           modalImage.removeAttribute('src');
         }
+        if (modalDialog) {
+          modalDialog.classList.remove('report-modal--portrait-image');
+        }
 
         if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
           lastFocusedElement.focus({ preventScroll: true });
@@ -1120,9 +1306,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     modalBackdrop?.addEventListener('click', () => closeModal());
 
+    // Action buttons
+    function openImageViewer(){
+      const src = modalImage?.getAttribute('src');
+      if (!src || !imageViewer || !imageViewerImg) return;
+      imageViewerImg.src = src;
+      imageViewerImg.alt = modalTitle?.textContent || 'Report image';
+      imageViewer.classList.add('open');
+      imageViewer.removeAttribute('hidden');
+    }
+    function closeImageViewer(){
+      if (!imageViewer || !imageViewerImg) return;
+      imageViewer.classList.remove('open');
+      imageViewer.setAttribute('hidden','hidden');
+      imageViewerImg.removeAttribute('src');
+    }
+    if (openFullBtn) { openFullBtn.addEventListener('click', openImageViewer); }
+    if (imageViewerClose) { imageViewerClose.addEventListener('click', closeImageViewer); }
+    imageViewer?.addEventListener('click', (e) => { if (e.target === imageViewer) closeImageViewer(); });
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', () => {
+        const src = modalImage?.getAttribute('src');
+        if (!src) return;
+        const a = document.createElement('a');
+        a.href = src;
+        a.download = (modalTitle?.textContent || 'report-image').replace(/\s+/g,'-').toLowerCase() + '.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+    }
+
     reportModal.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (imageViewer && imageViewer.classList.contains('open')) { closeImageViewer(); return; }
         closeModal();
       }
     });
@@ -1493,6 +1711,31 @@ document.addEventListener('DOMContentLoaded', () => {
         initLocationMarquee(loc);
       }
     });
+
+    // Check if URL contains a report parameter and auto-open that report's modal
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reportId = urlParams.get('report');
+      if (reportId) {
+        // Wait a bit for the page to fully load, then find and open the report
+        setTimeout(() => {
+          const targetCard = reportCards.find(card => {
+            const cardId = card.dataset.id || card.getAttribute('data-id');
+            return cardId && cardId.toString() === reportId.toString();
+          });
+          if (targetCard) {
+            // Scroll to the report card first
+            targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Then open the modal after a short delay
+            setTimeout(() => {
+              openModal(targetCard);
+            }, 500);
+          }
+        }, 1000);
+      }
+    } catch (e) {
+      console.warn('Failed to process report URL parameter:', e);
+    }
   }
 
   // Scroll spy: keep the sidebar highlight in sync with the visible section.
@@ -2800,7 +3043,47 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (children.length > max) items.push('<div class="gomk-cluster-item">+' + (children.length - max) + ' more…</div>');
             const html = '<div class="gomk-cluster-popup">' + items.join('') + '</div>';
-            L.popup({ maxWidth: 360 }).setLatLng(cluster.getLatLng()).setContent(html).openOn(map);
+            const popup = L.popup({ maxWidth: 360 }).setLatLng(cluster.getLatLng()).setContent(html).openOn(map);
+            
+            // Add click handlers to the View links after popup opens
+            setTimeout(() => {
+              const viewLinks = document.querySelectorAll('.gomk-view-report');
+              viewLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  const reportId = link.getAttribute('data-id');
+                  if (!reportId) return;
+                  
+                  // Try to find the report in the children markers
+                  const targetMarker = children.find(m => {
+                    const d = m.__reportData || {};
+                    return String(d.id) === String(reportId);
+                  });
+                  
+                  if (targetMarker && targetMarker.__reportData) {
+                    // Close the cluster popup
+                    map.closePopup();
+                    // Open the report in modal using openReportInModal
+                    try {
+                      if (typeof openReportInModal === 'function') {
+                        openReportInModal(targetMarker.__reportData);
+                      }
+                    } catch (err) {
+                      console.warn('Failed to open report modal:', err);
+                      // Fallback: show a toast or alert
+                      if (window.GOMK && window.GOMK.showToast) {
+                        window.GOMK.showToast('Unable to open report details', { type: 'error' });
+                      }
+                    }
+                  } else {
+                    console.warn('Report not found in cluster:', reportId);
+                    if (window.GOMK && window.GOMK.showToast) {
+                      window.GOMK.showToast('Report not found', { type: 'error' });
+                    }
+                  }
+                });
+              });
+            }, 50);
           } catch (e) { console.warn('Cluster click render failed', e); }
         });
       } catch (e) {}
@@ -2810,11 +3093,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderMarkers = (reports) => {
     const layer = createReportLayer();
     if (layer.clearLayers) layer.clearLayers();
+    try { reportCache.clear && reportCache.clear(); } catch (e) {}
     reports.forEach(r => {
       const lat = parseFloat(r.latitude || r.lat || 0);
       const lng = parseFloat(r.longitude || r.lon || 0);
       if (!lat || !lng) return;
-      const color = (r.status && String(r.status).toLowerCase() === 'resolved') ? '#2e8b57' : '#d84545';
+      // Color-code by status: unresolved (red), in_progress (orange/yellow), solved (green)
+      const st = String(r.status || '').toLowerCase();
+      let color = '#d84545'; // red for unresolved
+      if (st === 'in_progress' || st === 'in-progress') color = '#f59e0b'; // orange/amber for in_progress
+      if (st === 'solved' || st === 'resolved') color = '#2e8b57'; // green for solved
       // Use a small divIcon so markers match the visual style of clusters
       const icon = L.divIcon({
         className: 'gomk-marker-wrapper',
@@ -2843,6 +3131,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Maintain an in-memory cache of loaded report IDs to avoid re-adding markers
   const reportCache = new Map();
 
+  // Remove a cached marker by id (from layer and cache)
+  const removeMarkerById = (id) => {
+    try {
+      const key = Number(id);
+      if (!reportCache.has(key)) return;
+      const entry = reportCache.get(key);
+      const layer = createReportLayer();
+      if (entry && entry.marker && layer && typeof layer.removeLayer === 'function') {
+        try { layer.removeLayer(entry.marker); } catch (e) {}
+      }
+      reportCache.delete(key);
+    } catch (e) {}
+  };
+
   // Add a marker for a single report and register it in the cache
   const addMarker = (r) => {
     try {
@@ -2850,7 +3152,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const lat = parseFloat(r.latitude || r.lat || 0);
       const lng = parseFloat(r.longitude || r.lon || 0);
       if (!lat || !lng) return;
-      const color = (r.status && String(r.status).toLowerCase() === 'resolved') ? '#2e8b57' : '#d84545';
+      // Color-code by status: unresolved (red), in_progress (orange/yellow), solved (green)
+      const st = String(r.status || '').toLowerCase();
+      let color = '#d84545'; // red for unresolved
+      if (st === 'in_progress' || st === 'in-progress') color = '#f59e0b'; // orange/amber for in_progress
+      if (st === 'solved' || st === 'resolved') color = '#2e8b57'; // green for solved
       const icon = L.divIcon({
         className: 'gomk-marker-wrapper',
         html: '<span class="gomk-marker" style="background:' + color + '"></span>',
@@ -2899,9 +3205,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const url = `api/get_reports.php?north=${params.north}&south=${params.south}&east=${params.east}&west=${params.west}`;
       const res = await fetch(url);
       if (!res.ok) return;
-      const json = await res.json();
-      if (!json || !json.success || !Array.isArray(json.data)) return;
-      updateMarkers(json.data);
+  const json = await res.json();
+  if (!json || !json.success || !Array.isArray(json.data)) return;
+  // Reconcile: fully re-render markers to drop deleted/out-of-bounds items
+  renderMarkers(json.data);
     } catch (e) {
       console.warn('Failed to fetch reports for bounds', e);
     }
@@ -2936,9 +3243,25 @@ document.addEventListener('DOMContentLoaded', () => {
               // Fallback: try fetching full report via reports_list endpoint (by loading all and matching id)
               (async () => {
                 try {
-                  const r = await fetch('api/reports_list.php').then(res => res.json()).then(j => j && j.data ? j.data.find(x => String(x.id) === String(id)) : null);
-                  if (r) openReportInModal(r);
-                } catch (e) { console.warn('Failed to fetch report for id', id, e); }
+                  const r = await fetch('api/reports_list.php')
+                    .then(res => res.json())
+                    .then(j => j && j.data ? j.data.find(x => String(x.id) === String(id)) : null);
+                  if (r) {
+                    openReportInModal(r);
+                    try { map.closePopup(); } catch (e) {}
+                  } else {
+                    // Not found: show notice and remove stale marker
+                    if (window.GOMK && window.GOMK.showToast) {
+                      window.GOMK.showToast('This report is no longer available.', { type: 'info', duration: 3000 });
+                    } else {
+                      alert('This report is no longer available.');
+                    }
+                    removeMarkerById(id);
+                    try { map.closePopup(); } catch (e) {}
+                  }
+                } catch (e) {
+                  console.warn('Failed to fetch report for id', id, e);
+                }
               })();
             } catch (e) {}
           });
@@ -3006,26 +3329,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const modifier = (st === 'in_progress' || st === 'in-progress') ? 'in-progress' : (st === 'solved' || st === 'resolved' ? 'solved' : 'unresolved');
         fake.dataset.statusLabel = label;
         fake.dataset.statusModifier = modifier;
-        fake.dataset.submitted = reportObj.submitted_at || reportObj.created_at || '';
+        fake.dataset.submitted = (window.formatTo12hDisplay ? window.formatTo12hDisplay(reportObj.submitted_at || reportObj.created_at || '') : (reportObj.submitted_at || reportObj.created_at || ''));
         fake.dataset.image = reportObj.image || reportObj.image_path || '';
         // Call the global modal opener defined earlier in script
         try { openModal && typeof openModal === 'function' ? openModal(fake) : null; } catch (e) { console.warn(e); }
       } catch (e) { console.warn('openReportInModal failed', e); }
     };
-
-    // Expose a simple helper to open the map modal focused on a lat/lng from other UI (e.g. report cards)
-    try {
-      window.__gomkOpenMapAt = (lat, lng, displayName) => {
-        try {
-          if (!lat || !lng) return;
-          // ensure chosenPlace is set in this closure scope and then open map modal
-          if (typeof chosenPlace !== 'undefined') {
-            chosenPlace = { lat: Number(lat), lon: Number(lng), display_name: displayName || '' };
-          }
-          if (typeof openMapModal === 'function') openMapModal();
-        } catch (e) { console.warn('openMapAt failed', e); }
-      };
-    } catch (e) {}
 
   const openMapModal = () => {
       if (!mapModal) return;
@@ -3046,28 +3355,33 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => { try { map.invalidateSize(true); } catch (e) {} }, 250);
           }
         } catch (e) {}
+        
+        // Set marker and view after a brief delay to ensure map is ready
+        // Only do this if we have a specific location to show
         if (chosenPlace && marker) {
-          try {
-            marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+          setTimeout(() => {
             try {
-              const z = (map && typeof map.getMaxZoom === 'function') ? Math.min(map.getMaxZoom(), 16) : 16;
-              map.setView([chosenPlace.lat, chosenPlace.lon], z);
-              // Bind and open a popup for the selected report location so users
-              // see the marker's info immediately when map modal opens.
-              try {
-                const popupText = (chosenPlace.display_name || chosenPlace.name || '').toString();
-                if (marker && popupText) {
+              // Position marker at the report location
+              marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+              console.log('openMapModal: Marker set to', chosenPlace.lat, chosenPlace.lon);
+              
+              // Zoom to street-level view
+              const z = 18; // Street-level zoom for detailed view of report location
+              map.setView([chosenPlace.lat, chosenPlace.lon], z, { animate: false });
+              console.log('openMapModal: Map view set to', chosenPlace.lat, chosenPlace.lon, 'zoom:', z);
+              
+              // Open the popup
+              setTimeout(() => {
+                try {
+                  const popupText = (chosenPlace.display_name || chosenPlace.name || 'Report Location').toString();
                   marker.bindPopup(popupText, { closeButton: true }).openPopup();
-                } else if (marker) {
-                  // ensure a minimal popup is available
-                  marker.bindPopup('Report location', { closeButton: true }).openPopup();
-                }
-              } catch (e) { /* ignore popup errors */ }
-            } catch (e) {}
-          } catch (e) {}
+                  console.log('openMapModal: Popup opened with text:', popupText);
+                } catch (e) { console.error('Error opening popup:', e); }
+              }, 100);
+            } catch (e) { console.error('Error setting map view:', e); }
+          }, 150);
         }
-        // focus the place search input so users can type immediately
-        try { if (placeInput) { placeInput.focus(); placeInput.select && placeInput.select(); } } catch (e) {}
+        // No search input to focus anymore
       }, 80);
     };
 
@@ -3393,6 +3707,42 @@ document.addEventListener('DOMContentLoaded', () => {
       (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Selection cleared', { type: 'info' }) : void 0;
     });
 
+    // Expose helper to open the map modal focused on a lat/lng from other UI (e.g. report cards)
+    window.__gomkOpenMapAt = (lat, lng, displayName) => {
+      try {
+        if (!lat || !lng) {
+          console.warn('__gomkOpenMapAt called without valid coordinates', { lat, lng });
+          return;
+        }
+        
+        // Set the chosen place FIRST before initializing map
+        chosenPlace = { lat: Number(lat), lon: Number(lng), display_name: displayName || 'Report location' };
+        console.log('__gomkOpenMapAt - chosenPlace set to:', chosenPlace);
+        
+        // Ensure map and marker are initialized
+        ensureMap();
+        
+        console.log('__gomkOpenMapAt - marker exists:', !!marker);
+        console.log('__gomkOpenMapAt - map exists:', !!map);
+        
+        // Immediately position the marker at the chosen location
+        if (marker && chosenPlace) {
+          marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+          const popupText = (chosenPlace.display_name || 'Report Location').toString();
+          marker.bindPopup(popupText, { closeButton: true });
+          console.log('__gomkOpenMapAt - marker positioned at:', chosenPlace.lat, chosenPlace.lon);
+        }
+        
+        // Open the modal (which will also set view and open popup)
+        openMapModal();
+      } catch (e) { 
+        console.error('openMapAt failed', e); 
+      }
+    };
+
+    // Also expose openMapModal globally for fallback
+    window.openMapModal = openMapModal;
+
   }
 
   // Initialize the create report map picker if present
@@ -3454,9 +3804,7 @@ document.addEventListener('DOMContentLoaded', () => {
           passwordField.focus();
 
           // Inject confirm password input BELOW the first input (not beside)
-          // Instead of absolutely positioning the confirm field (which kept it
-          // visually outside the card), insert it into the normal document flow
-          // so the parent card grows naturally when editing begins.
+          // Keep it in normal flow so the card expands naturally.
           const group = passwordField.closest('.profile-input-group') || passwordField.parentElement;
           const fieldContainer = group?.parentElement || null; // typically .profile-field
           if (group && fieldContainer && !document.getElementById('passwordConfirmField')) {
@@ -3464,34 +3812,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const wrap = document.createElement('div');
             wrap.className = 'profile-input-group profile-input-group--confirm';
             wrap.id = 'passwordConfirmWrap';
-            // Keep the confirm input in the normal flow so the card expands
+            // Basic layout
             wrap.style.position = 'relative';
-            wrap.style.display = 'grid';
-            wrap.style.gridTemplateColumns = '1fr auto';
-            wrap.style.alignItems = 'center';
+            wrap.style.display = 'block';
             wrap.style.marginTop = '8px';
-            // Match the width and horizontal offset of the original input group
-            // so the confirm input appears exactly the same width as the
-            // "Enter new password" field.
-            // Append the confirm wrapper to the card body and size/offset it so it
-            // lines up exactly below the original password input. Using the
-            // card body keeps the wrapper in-flow so the card expands naturally.
+            // Append inside the same field container so it matches the Password input's width
             const cardBody = passwordField.closest('.profile-card-body') || fieldContainer;
-            cardBody.appendChild(wrap);
-            const computePosition = () => {
-              try {
-                const groupRect = group.getBoundingClientRect();
-                const cardRect = cardBody.getBoundingClientRect();
-                const left = Math.max(0, Math.round(groupRect.left - cardRect.left));
-                wrap.style.width = Math.round(groupRect.width) + 'px';
-                wrap.style.marginLeft = left + 'px';
-                wrap.style.boxSizing = 'border-box';
-              } catch (e) { /* ignore */ }
-            };
-            computePosition();
-            const onResize = () => computePosition();
-            window.addEventListener('resize', onResize);
-            wrap._onResize = onResize;
+            fieldContainer.appendChild(wrap);
             // Trigger the open animation on the next tick
             requestAnimationFrame(() => wrap.classList.add('is-open'));
             const confirm = document.createElement('input');
@@ -3502,63 +3829,33 @@ document.addEventListener('DOMContentLoaded', () => {
             confirm.autocomplete = 'new-password';
             confirm.style.width = '100%';
             wrap.appendChild(confirm);
-            // Add a visibility toggle for confirm password
-            if (!document.getElementById('passwordConfirmToggleBtn')) {
-              const makeToggle = (input, id) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'auth-field-toggle';
-                btn.id = id;
-                btn.setAttribute('aria-label', 'Show password');
-                btn.setAttribute('aria-pressed', 'false');
-                btn.dataset.visible = 'false';
-                btn.innerHTML = '<span class="auth-toggle-icon" aria-hidden="true"></span>';
-                btn.addEventListener('click', (ev) => {
-                  ev.preventDefault();
-                  const isVisible = btn.dataset.visible === 'true';
-                  input.type = isVisible ? 'password' : 'text';
-                  btn.dataset.visible = isVisible ? 'false' : 'true';
-                  btn.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
-                  btn.setAttribute('aria-pressed', isVisible ? 'false' : 'true');
-                });
-                return btn;
-              };
-              wrap.appendChild(makeToggle(confirm, 'passwordConfirmToggleBtn'));
-            }
-            // If we appended into the card body fallback above, we already attached
-            // and stored a resize handler; ensure animation kicks in in all cases.
-            if (wrap.parentElement) requestAnimationFrame(() => wrap.classList.add('is-open'));
-          }
-
-          // Add a visibility toggle for the main password field (inline with input)
-          if (group && !document.getElementById('passwordToggleBtn')) {
-            const makeToggle = (input, id) => {
-              const btn = document.createElement('button');
-              btn.type = 'button';
-              btn.className = 'auth-field-toggle';
-              btn.id = id;
-              btn.setAttribute('aria-label', 'Show password');
-              btn.setAttribute('aria-pressed', 'false');
-              btn.dataset.visible = 'false';
-              btn.innerHTML = '<span class="auth-toggle-icon" aria-hidden="true"></span>';
-              btn.addEventListener('click', (ev) => {
-                ev.preventDefault();
-                const isVisible = btn.dataset.visible === 'true';
-                input.type = isVisible ? 'password' : 'text';
-                btn.dataset.visible = isVisible ? 'false' : 'true';
-                btn.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
-                btn.setAttribute('aria-pressed', isVisible ? 'false' : 'true');
+            // Add a single "Show password" checkbox that toggles both fields
+            if (!document.getElementById('passwordShowAllRow')) {
+              const showRow = document.createElement('label');
+              showRow.id = 'passwordShowAllRow';
+              showRow.style.display = 'flex';
+              showRow.style.alignItems = 'center';
+              showRow.style.gap = '10px';
+              showRow.style.marginTop = '10px';
+              const cb = document.createElement('input');
+              cb.type = 'checkbox';
+              cb.id = 'passwordShowAllChk';
+              const txt = document.createElement('span');
+              txt.textContent = 'Show password';
+              showRow.appendChild(cb);
+              showRow.appendChild(txt);
+              // Keep the checkbox aligned with the Password field width as well
+              fieldContainer.appendChild(showRow);
+              cb.addEventListener('change', () => {
+                const type = cb.checked ? 'text' : 'password';
+                passwordField.type = type;
+                confirm.type = type;
               });
-              return btn;
-            };
-            const editBtn = group.querySelector('.profile-edit-btn');
-            const toggle = makeToggle(passwordField, 'passwordToggleBtn');
-            if (editBtn && editBtn.parentElement === group) {
-              group.insertBefore(toggle, editBtn);
-            } else {
-              group.appendChild(toggle);
             }
           }
+          // Remove any existing per-input toggle buttons if present (we use one checkbox now)
+          try { document.getElementById('passwordToggleBtn')?.remove(); } catch (e) {}
+          try { document.getElementById('passwordConfirmToggleBtn')?.remove(); } catch (e) {}
           
           // Change button to save
           editPasswordBtn.innerHTML = `
@@ -3607,11 +3904,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const c = document.getElementById('passwordConfirmField');
                 const w = document.getElementById('passwordConfirmWrap');
                 if (w) { if (w._onResize) window.removeEventListener('resize', w._onResize); w.remove(); } else if (c) c.remove();
-                // Remove visibility toggles
-                const t1 = document.getElementById('passwordToggleBtn');
-                if (t1) t1.remove();
-                const t2 = document.getElementById('passwordConfirmToggleBtn');
-                if (t2) t2.remove();
+                const show = document.getElementById('passwordShowAllRow');
+                if (show) show.remove();
                 editPasswordBtn.innerHTML = `
                   <svg viewBox="0 0 24 24">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -3707,10 +4001,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const c = document.getElementById('passwordConfirmField');
           const w = document.getElementById('passwordConfirmWrap');
           if (w) { if (w._onResize) window.removeEventListener('resize', w._onResize); w.remove(); } else if (c) c.remove();
-          const t1 = document.getElementById('passwordToggleBtn');
-          if (t1) t1.remove();
-          const t2 = document.getElementById('passwordConfirmToggleBtn');
-          if (t2) t2.remove();
+          const show = document.getElementById('passwordShowAllRow');
+          if (show) show.remove();
           
           editPasswordBtn.innerHTML = `
             <svg viewBox="0 0 24 24">

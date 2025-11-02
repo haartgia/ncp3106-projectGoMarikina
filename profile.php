@@ -286,6 +286,8 @@ if (is_logged_in()) {
                 <rect x="5" y="11" width="14" height="2" rx="1" />
             </svg>
         </button>
+
+        <?php include __DIR__ . '/includes/report_modal.php'; ?>
     </div>
 
     <!-- Map view modal (used when clicking location on a report card) -->

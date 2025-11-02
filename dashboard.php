@@ -245,7 +245,7 @@ $barangays = [
                         </select>
                         <span class="city-select-arrow" aria-hidden="true">▾</span>
                     </div>
-                    <p class="city-selection-meta">Currently viewing: <strong id="selectedStation">None</strong></p>
+                    <p class="city-selection-meta">Currently viewing: <strong id="selectedStation">Unavailable</strong></p>
                     <p class="city-selection-note">Levels update from PAGASA water level table.</p>
                 </div>
             </header>
@@ -340,7 +340,7 @@ $barangays = [
                         <h2>Marikina River levels</h2>
                         <p class="admin-section-subtitle">Current, Alert, Alarm, and Critical levels per station.</p>
                     </div>
-                    <span class="city-selected-pill">Selected station: <strong id="selectedStationChip">None</strong></span>
+                    <span class="city-selected-pill">Selected station: <strong id="selectedStationChip">Unavailable</strong></span>
                 </div>
 
                 <div class="city-metric-grid">
@@ -613,11 +613,21 @@ $barangays = [
                                 setVal('riverTempVal', lastTemp != null ? Number(lastTemp).toFixed(1) : null);
                                 setTimeSafe('riverTempTime', history.times.at(-1) || null);
 
+                                // Initialize river history with station's historical data if available
+                                if (found.history && Array.isArray(found.history) && found.history.length > 0) {
+                                    riverHistory.current = [...found.history];
+                                } else if (riverHistory.current.length === 0) {
+                                    // If no history yet, create a simple trend
+                                    riverHistory.current = Array(20).fill(null).map(() => 
+                                        found.current + (Math.random() - 0.5) * 2.0
+                                    );
+                                }
+
                                 // Draw small sparklines
                                 drawSpark(qs('riverCurrentChart'), riverHistory.current, '#16a34a');
-                                drawSpark(qs('riverTempChart'), history.temp, '#f59e0b');
+                                drawSpark(qs('riverTempChart'), history.temp.length > 0 ? history.temp : [26, 26.5, 26.2, 26.8, 26.1], '#f59e0b');
 
-                            // Push into riverHistory so modal can render a small line
+                            // Push current reading into riverHistory
                             const MAX_RIVER = 240;
                             if (found.current != null){ riverHistory.current.push(Number(found.current)); if (riverHistory.current.length>MAX_RIVER) riverHistory.current.shift(); }
                             riverHistory.temp.push(lastTemp != null ? Number(lastTemp) : null); if (riverHistory.temp.length>MAX_RIVER) riverHistory.temp.shift();
@@ -626,8 +636,38 @@ $barangays = [
             }
 
             async function fetchRiver(){
-                        // City-wide river API has been removed. Intentionally reject to trigger UI fallback.
-                        throw new Error('river api disabled');
+                // Return dummy data for all Marikina River stations with historical trends
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const stations = [
+                            { name: 'Montalban', current: 12.5, alert: 14.0, alarm: 16.0, critical: 18.0 },
+                            { name: 'San Mateo-1', current: 13.2, alert: 15.0, alarm: 17.0, critical: 19.0 },
+                            { name: 'Rodriguez', current: 11.8, alert: 13.5, alarm: 15.5, critical: 17.5 },
+                            { name: 'Nangka', current: 10.9, alert: 12.5, alarm: 14.5, critical: 16.5 },
+                            { name: 'Sto Nino', current: 9.7, alert: 11.5, alarm: 13.5, critical: 15.5 },
+                            { name: 'Tumana Bridge', current: 8.3, alert: 10.0, alarm: 12.0, critical: 14.0 },
+                            { name: 'Rosario Bridge', current: 7.5, alert: 9.0, alarm: 11.0, critical: 13.0 }
+                        ];
+                        const now = new Date();
+                        const timestamp = now.toISOString().split('T')[0] + ' ' + 
+                                        now.toTimeString().split(' ')[0].substring(0,5) + ':00';
+                        // Add random variations to current levels (±0.5m) and generate historical data
+                        stations.forEach(s => {
+                            const baseLevel = s.current;
+                            s.current = Math.max(0, baseLevel + (Math.random() - 0.5) * 1.0);
+                            s.current = Number(s.current.toFixed(2));
+                            s.time = timestamp;
+                            
+                            // Generate dummy historical data (last 24 hours, hourly)
+                            s.history = [];
+                            for (let i = 24; i >= 0; i--) {
+                                const variation = (Math.random() - 0.5) * 2.0; // ±1m variation
+                                s.history.push(Math.max(0, baseLevel + variation));
+                            }
+                        });
+                        resolve({ stations });
+                    }, 100);
+                });
             }
 
             function ensureRiverData(){

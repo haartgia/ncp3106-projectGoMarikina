@@ -60,7 +60,6 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GO! MARIKINA</title>
-    <!-- removed external framework to use a lightweight in-project carousel -->
     <link rel="stylesheet" href="./assets/css/style.css">
 </head>
 <body id="top">
@@ -163,18 +162,12 @@ try {
                 </div>
 
                 <?php if ($announcements): ?>
-                    <?php $annRev = array_values(array_reverse($announcements)); ?>
-                    <div id="announcementsCarousel" class="carousel slide announcements-carousel" data-bs-ride="carousel" data-bs-interval="5000">
-                        <div class="carousel-indicators">
-                            <?php foreach ($annRev as $i => $a): ?>
-                                <button type="button" data-bs-target="#announcementsCarousel" data-bs-slide-to="<?php echo $i; ?>" <?php if ($i === 0) echo 'class="active" aria-current="true"'; ?> aria-label="Slide <?php echo $i + 1; ?>"></button>
-                            <?php endforeach; ?>
-                        </div>
-
+                    <?php $annRev = array_reverse($announcements); ?>
+                    <div id="announcementsCarousel" class="announcements-carousel" data-bs-interval="5000" aria-roledescription="carousel" aria-label="Latest announcements">
                         <div class="carousel-inner">
                             <?php foreach ($annRev as $i => $announcement): ?>
-                                <div class="carousel-item <?php echo $i === 0 ? 'active' : ''; ?>">
-                                    <article class="public-announcement-card" role="group" aria-roledescription="slide" aria-label="Announcement <?php echo $i + 1; ?>" data-announcement-id="<?php echo (int) $announcement['id']; ?>">
+                                <div class="carousel-item<?php echo $i === 0 ? ' active' : ''; ?>" aria-roledescription="slide" aria-label="Slide <?php echo ($i+1) . ' of ' . count($annRev); ?>">
+                                    <article class="public-announcement-card" data-announcement-id="<?php echo (int) $announcement['id']; ?>">
                                         <header class="public-announcement-card__header">
                                             <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
                                             <time datetime="<?php echo htmlspecialchars(format_datetime_attr($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?>">Published <?php echo htmlspecialchars(format_datetime_display($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?></time>
@@ -190,6 +183,11 @@ try {
                                         </footer>
                                     </article>
                                 </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="carousel-indicators" role="tablist" aria-label="Carousel indicators">
+                            <?php foreach ($annRev as $i => $_): ?>
+                                <button type="button"<?php echo $i === 0 ? ' class="active" aria-current="true"' : ''; ?> aria-label="Go to slide <?php echo ($i+1); ?>"></button>
                             <?php endforeach; ?>
                         </div>
                     </div>
@@ -374,56 +372,7 @@ try {
             </section>
         </main>
 
-    <div class="report-modal" id="reportModal" hidden>
-        <div class="report-modal__backdrop" data-report-modal-close data-report-modal-backdrop></div>
-    <div class="report-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle" aria-describedby="reportModalSummary" tabindex="-1">
-            <button type="button" class="report-modal__close" data-report-modal-close aria-label="Close report details">
-                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                </svg>
-            </button>
-            <div class="report-modal__content">
-                <header class="report-modal__header">
-                    <div class="report-modal__header-info">
-                        <h3 id="reportModalTitle" data-report-modal-title>Citizen report</h3>
-                        <p class="report-modal__submitted">Submitted <span data-report-modal-submitted>—</span></p>
-                    </div>
-                    <div class="report-modal__badges">
-                        <span class="chip chip-category" data-report-modal-category>Category</span>
-                        <span class="chip chip-status" data-report-modal-status>Status</span>
-                    </div>
-                </header>
-                <dl class="report-modal__meta-grid">
-                    <div class="report-modal__meta-item">
-                        <dt>Reporter</dt>
-                        <dd data-report-modal-reporter>—</dd>
-                    </div>
-                    <div class="report-modal__meta-item" data-report-modal-meta="location">
-                        <dt>Location</dt>
-                        <dd data-report-modal-location>—</dd>
-                    </div>
-                </dl>
-                <div class="report-modal__summary">
-                    <h4>Decription</h4>
-                    <p id="reportModalSummary" data-report-modal-summary>—</p>
-                </div>
-                <div class="report-modal__media" data-report-modal-media>
-                    <img data-report-modal-image alt="" hidden>
-                    <div class="report-modal__media-placeholder" data-report-modal-placeholder>
-                        <div class="report-media--placeholder-icon">
-                            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                                <rect x="3" y="5" width="18" height="14" rx="2" />
-                                <circle cx="8.5" cy="10.5" r="2" />
-                                <path d="M21 15.5 16.5 11 6 19" />
-                            </svg>
-                        </div>
-                        <span>No photo provided</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <?php include __DIR__ . '/includes/report_modal.php'; ?>
 
     <!-- Floating action button stays pinned bottom-right -->
     <button type="button" class="floating-action" aria-label="Create a new report" onclick="window.location.href='create-report.php'">
@@ -436,11 +385,12 @@ try {
 
     <!-- Announcements Modal -->
     <div id="announcementsModal" class="modal" hidden>
-        <div class="modal-content">
-            <div class="modal-header">
-                <div>
-                    <h2>City Announcements</h2>
-                    <p class="modal-subtitle">Stay informed about advisories, closures, and safety reminders from city hall.</p>
+        <div class="modal-content ann-modal-content" role="dialog" aria-modal="true">
+            <div class="ann-modal-header">
+                <div class="ann-modal-title">
+                    <p class="ann-modal-kicker">City Announcements</p>
+                    <h2>Latest updates</h2>
+                    <p class="ann-modal-subtitle">Stay informed about advisories, closures, and safety reminders from city hall.</p>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close modal">
                     <svg viewBox="0 0 24 24" role="presentation" focusable="false" width="24" height="24">
@@ -449,23 +399,41 @@ try {
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="ann-modal-body">
                 <?php if (!empty($announcements)): ?>
-                    <ul class="modal-announcements-list">
-                        <?php foreach ($announcements as $announcement): ?>
-                            <li class="modal-announcement-item">
-                                <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
-                                <p class="announcement-date"><?php echo date('M j, Y · h:i A', strtotime($announcement['created_at'])); ?></p>
-                                <?php if (!empty($announcement['image'])): ?>
-                                    <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" 
-                                         alt="" class="modal-announcement-image">
-                                <?php endif; ?>
-                                <div class="announcement-content">
-                                    <?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
+                    <?php
+                        $cardsPerSlide = 3;
+                        $pages = array_chunk($announcements, $cardsPerSlide);
+                    ?>
+                    <div id="announcementsModalCarousel" class="ann-modal-carousel" aria-roledescription="carousel" aria-label="Announcements carousel">
+                        <div class="ann-modal-slides">
+                            <?php foreach ($pages as $pi => $page): ?>
+                                <div class="ann-modal-slide<?php echo $pi === 0 ? ' active' : ''; ?>" aria-roledescription="slide" aria-label="Slide <?php echo ($pi+1) . ' of ' . count($pages); ?>">
+                                    <div class="ann-modal-grid">
+                                        <?php foreach ($page as $announcement): ?>
+                                            <article class="ann-card">
+                                                <header class="ann-card__header">
+                                                    <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
+                                                    <time datetime="<?php echo htmlspecialchars(format_datetime_attr($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(format_datetime_display($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?></time>
+                                                </header>
+                                                <?php if (!empty($announcement['image'])): ?>
+                                                    <figure class="ann-card__media">
+                                                        <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" alt="" loading="lazy">
+                                                    </figure>
+                                                <?php endif; ?>
+                                                <p class="ann-card__body"><?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?></p>
+                                            </article>
+                                        <?php endforeach; ?>
+                                    </div>
                                 </div>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="ann-modal-indicators" role="tablist" aria-label="Carousel indicators">
+                            <?php foreach ($pages as $pi => $_): ?>
+                                <button type="button" class="ann-indicator<?php echo $pi === 0 ? ' active' : ''; ?>" aria-label="Go to slide <?php echo $pi+1; ?>"<?php echo $pi === 0 ? ' aria-current="true"' : ''; ?>></button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                 <?php else: ?>
                     <p class="modal-empty">No announcements available.</p>
                 <?php endif; ?>
@@ -476,23 +444,12 @@ try {
     <div id="mapModal" class="modal" aria-hidden="true" style="display:none;">
         <div class="modal-content map-modal-content" role="dialog" aria-modal="true">
             <div class="modal-header">
-                <h2>View location</h2>
+                <h2>Report Location</h2>
                 <button type="button" class="modal-close" id="mapModalClose" aria-label="Close">×</button>
             </div>
             <div class="modal-body">
                 <div class="map-picker-wrap">
-                    <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." />
-                    <div id="reportMap" class="report-map" style="height:420px;"></div>
-                    <div id="infowindow-content" class="visually-hidden">
-                        <span id="place-name" data-key="place-name"></span>
-                        <span id="place-address" data-key="place-address"></span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <div class="map-footer-actions">
-                    <button type="button" id="mapClearSelection" class="btn-map-clear">CLEAR</button>
-                    <button type="button" id="mapUsePlace" class="btn-map-use">USE THIS PLACE</button>
+                    <div id="reportMap" class="report-map" style="height:520px;"></div>
                 </div>
             </div>
         </div>
@@ -500,7 +457,6 @@ try {
 
     <!-- MarkerCluster plugin for Leaflet (optional; script is loaded before app script) -->
     <script defer src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
-    <!-- bootstrap removed; using lightweight vanilla carousel implementation in assets/js/script.js -->
     <script src="./assets/js/script.js" defer></script>
 </body>
 </html>

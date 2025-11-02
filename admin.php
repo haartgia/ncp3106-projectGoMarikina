@@ -22,10 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_report') {
         $reportId = (int)($_POST['report_id'] ?? 0);
         if ($reportId) {
-            // Archive the report row first, preserving original data
+            // Archive the report row first, preserving original data including lat/lng
             try {
                 $archiver = (int)(current_user()['id'] ?? 0);
-                $stmtA = $conn->prepare('INSERT INTO reports_archive (id, user_id, title, category, description, location, image_path, status, created_at, updated_at, archived_at, archived_by) SELECT id, user_id, title, category, description, location, image_path, status, created_at, updated_at, NOW(), ? FROM reports WHERE id = ?');
+                $stmtA = $conn->prepare('INSERT INTO reports_archive (id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at, archived_at, archived_by) SELECT id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at, NOW(), ? FROM reports WHERE id = ?');
                 $stmtA->bind_param('ii', $archiver, $reportId);
                 $stmtA->execute();
                 $stmtA->close();
@@ -294,10 +294,38 @@ foreach ($reports as $rpt) {
                                             </form>
                                         </td>
                                         <td data-title="Actions">
-                                            <form method="post" class="admin-inline-form" data-confirm-message="Delete this report?">
+                                            <button
+                                                type="button"
+                                                class="admin-view-report admin-view-btn"
+                                                title="View report"
+                                                aria-label="View report"
+                                                data-title="<?php echo htmlspecialchars($report['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-category="<?php echo htmlspecialchars($report['category'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-reporter="<?php echo htmlspecialchars($report['reporter'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-submitted="<?php echo htmlspecialchars(format_datetime_display($report['submitted_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-status="<?php echo htmlspecialchars($report['status'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-location="<?php echo htmlspecialchars($report['location'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-image="<?php echo htmlspecialchars($report['image'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-summary="<?php echo htmlspecialchars($report['summary'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                                    <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                                <span>View</span>
+                                            </button>
+                                            <form method="post" class="admin-inline-form" data-confirm-message="Delete this report?" style="display:inline;">
                                                 <input type="hidden" name="action" value="delete_report">
                                                 <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
-                                                <button type="submit" class="admin-delete">Delete</button>
+                                                <button type="submit" class="admin-delete" aria-label="Delete report">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    </svg>
+                                                    <span>Delete</span>
+                                                </button>
                                             </form>
                                         </td>
                                     </tr>
@@ -318,8 +346,232 @@ foreach ($reports as $rpt) {
             </section>
         </main>
     </div>
+    <!-- Report View Modal (shared include) -->
+    <?php include __DIR__ . '/includes/report_modal.php'; ?>
+    </div>
     <script>
     document.addEventListener('DOMContentLoaded', function(){
+        try { console.log('[Admin] DOM ready: wiring report modal'); } catch(_) {}
+        // Modal logic using shared report modal design
+        const reportModal = document.getElementById('reportModal');
+        const modalDialog = reportModal ? reportModal.querySelector('.report-modal__dialog') : null;
+        const modalBackdrop = reportModal ? reportModal.querySelector('[data-report-modal-backdrop]') : null;
+        const modalCloseButtons = Array.from(reportModal ? reportModal.querySelectorAll('[data-report-modal-close]') : []);
+        const mTitle = reportModal ? reportModal.querySelector('[data-report-modal-title]') : null;
+        const mSubmitted = reportModal ? reportModal.querySelector('[data-report-modal-submitted]') : null;
+        const mReporter = reportModal ? reportModal.querySelector('[data-report-modal-reporter]') : null;
+        const mLocation = reportModal ? reportModal.querySelector('[data-report-modal-location]') : null;
+        const mCategory = reportModal ? reportModal.querySelector('[data-report-modal-category]') : null;
+        const mStatus = reportModal ? reportModal.querySelector('[data-report-modal-status]') : null;
+        const mSummary = reportModal ? reportModal.querySelector('[data-report-modal-summary]') : null;
+        const mMedia = reportModal ? reportModal.querySelector('[data-report-modal-media]') : null;
+        const mImage = reportModal ? reportModal.querySelector('[data-report-modal-image]') : null;
+        const mPlaceholder = reportModal ? reportModal.querySelector('[data-report-modal-placeholder]') : null;
+        const mActions = reportModal ? reportModal.querySelector('[data-report-modal-actions]') : null;
+        const mOpenFull = reportModal ? reportModal.querySelector('[data-report-open-full]') : null;
+        const mDownload = reportModal ? reportModal.querySelector('[data-report-download]') : null;
+        const mViewer = reportModal ? reportModal.querySelector('[data-report-image-viewer]') : null;
+        const mViewerImg = reportModal ? reportModal.querySelector('[data-report-viewer-image]') : null;
+        const mViewerClose = reportModal ? reportModal.querySelector('[data-report-viewer-close]') : null;
+
+        function applyStatusChip(el, status) {
+            if (!el) return;
+            const st = String(status || '').toLowerCase();
+            const label = (st === 'in_progress' || st === 'in-progress') ? 'In progress' : (st === 'solved' || st === 'resolved' ? 'Solved' : 'Unresolved');
+            const modifier = (st === 'in_progress' || st === 'in-progress') ? 'in_progress' : (st === 'solved' || st === 'resolved' ? 'solved' : 'unresolved');
+            el.textContent = label;
+            el.classList.remove('unresolved','in_progress','solved');
+            el.classList.add(modifier);
+        }
+
+        function updateMedia(imageUrl, titleText) {
+            if (!mImage || !mPlaceholder || !mMedia) return;
+
+            // Helper: apply orientation-based layout classes on the dialog
+            function applyOrientation() {
+                if (!modalDialog || !mImage || !mImage.naturalWidth || !mImage.naturalHeight) return;
+                const ratio = mImage.naturalHeight / mImage.naturalWidth;
+                const isPortrait = ratio > 1.05; // small tolerance so nearly-square stays landscape layout
+                modalDialog.classList.toggle('report-modal--portrait-image', isPortrait);
+            }
+
+            const hasImage = !!imageUrl;
+            mMedia.classList.toggle('has-image', hasImage);
+            mMedia.classList.toggle('no-image', !hasImage);
+            if (mActions) {
+                mActions.hidden = !hasImage;
+            }
+
+            // Clear previous listeners to avoid stacking
+            if (mImage._onloadHandler) mImage.removeEventListener('load', mImage._onloadHandler);
+            if (mImage._onerrorHandler) mImage.removeEventListener('error', mImage._onerrorHandler);
+
+            if (hasImage) {
+                mImage._onloadHandler = function() {
+                    mImage.hidden = false;
+                    mPlaceholder.hidden = true;
+                    mPlaceholder.style.display = 'none';
+                    applyOrientation();
+                };
+                mImage._onerrorHandler = function() {
+                    // Fallback to placeholder on error
+                    mImage.removeAttribute('src');
+                    mImage.hidden = true;
+                    mPlaceholder.hidden = false;
+                    mPlaceholder.style.removeProperty('display');
+                    if (modalDialog) modalDialog.classList.remove('report-modal--portrait-image');
+                };
+                mImage.addEventListener('load', mImage._onloadHandler, { once: true });
+                mImage.addEventListener('error', mImage._onerrorHandler, { once: true });
+
+                mImage.src = imageUrl;
+                mImage.alt = `${titleText || 'Report'} photo`;
+
+                // If the image is cached, load may not fire; apply immediately when dimensions are available
+                if (mImage.complete && mImage.naturalWidth) {
+                    mImage.hidden = false;
+                    mPlaceholder.hidden = true;
+                    mPlaceholder.style.display = 'none';
+                    applyOrientation();
+                }
+            } else {
+                mImage.removeAttribute('src');
+                mImage.hidden = true;
+                mPlaceholder.hidden = false;
+                mPlaceholder.style.removeProperty('display');
+                if (modalDialog) modalDialog.classList.remove('report-modal--portrait-image');
+            }
+        }
+
+        function openAdminReportModal(data) {
+            if (!reportModal) return;
+            if (mTitle) { mTitle.textContent = data.title || 'Citizen report'; }
+            if (mSubmitted) { mSubmitted.textContent = (window.formatTo12hDisplay ? window.formatTo12hDisplay(data.submitted_at || data.submitted || '') : (data.submitted_at || data.submitted || '—')); }
+            if (mReporter) { mReporter.textContent = data.reporter || '—'; }
+            if (mLocation) { mLocation.textContent = data.location || '—'; }
+            if (mCategory) {
+                const cat = data.category || '';
+                mCategory.textContent = cat ? (cat.charAt(0).toUpperCase() + cat.slice(1)) : 'Category';
+                mCategory.hidden = !cat;
+            }
+            applyStatusChip(mStatus, data.status);
+            if (mSummary) { mSummary.textContent = data.summary || 'No summary provided.'; }
+            updateMedia(data.image, data.title);
+
+            reportModal.removeAttribute('hidden');
+            document.body.classList.add('modal-open');
+            reportModal.classList.add('is-open');
+            if (modalDialog && typeof modalDialog.focus === 'function') { modalDialog.focus({ preventScroll: true }); }
+        }
+
+        function closeAdminReportModal() {
+            if (!reportModal) return;
+            reportModal.classList.remove('is-open');
+            reportModal.setAttribute('hidden','hidden');
+            document.body.classList.remove('modal-open');
+            if (mImage) mImage.removeAttribute('src');
+            // Reset orientation class on close so next open recomputes cleanly
+            if (modalDialog) modalDialog.classList.remove('report-modal--portrait-image');
+        }
+
+        const viewButtons = Array.from(document.querySelectorAll('.admin-view-report'));
+        try { console.log('[Admin] Found view buttons:', viewButtons.length); } catch(_) {}
+        viewButtons.forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                try { console.log('[Admin] View clicked'); } catch(_) {}
+                const ds = btn.dataset || {};
+                let data = {
+                    title: ds.title || 'Citizen report',
+                    category: ds.category || '',
+                    reporter: ds.reporter || '—',
+                    submitted_at: ds.submitted || '—',
+                    status: ds.status || '',
+                    location: ds.location || '—',
+                    image: ds.image || '',
+                    summary: ds.summary || ''
+                };
+                // Fallback to row text if any critical field is empty
+                if (!data.title || data.title === 'Citizen report') {
+                    const row = btn.closest('tr');
+                    data.title = row?.querySelector('td[data-title="Title"]')?.textContent?.trim() || data.title;
+                    data.category = row?.querySelector('td[data-title="Category"]')?.textContent?.trim() || data.category;
+                    data.reporter = row?.querySelector('td[data-title="Reporter"]')?.textContent?.trim() || data.reporter;
+                    data.submitted_at = row?.querySelector('td[data-title="Submitted"]')?.textContent?.trim() || data.submitted_at;
+                    data.status = row?.getAttribute('data-status') || data.status;
+                }
+                try { console.log('[Admin] Modal data:', data); } catch(_) {}
+                openAdminReportModal(data);
+            });
+        });
+
+        // Event delegation fallback in case buttons are re-rendered dynamically
+        document.addEventListener('click', function(ev){
+            var tgt = ev.target;
+            var btn = (tgt && typeof tgt.closest === 'function') ? tgt.closest('.admin-view-report') : null;
+            if (!btn) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            const ds = btn.dataset || {};
+            const data = {
+                title: ds.title || 'Citizen report',
+                category: ds.category || '',
+                reporter: ds.reporter || '—',
+                submitted_at: ds.submitted || '—',
+                status: ds.status || '',
+                location: ds.location || '—',
+                image: ds.image || '',
+                summary: ds.summary || ''
+            };
+            openAdminReportModal(data);
+        }, { capture: true });
+
+        // Wire media action buttons once (they reference current image src when clicked)
+        function openImageViewer(){
+            try {
+                if (!mViewer || !mViewerImg) return;
+                const src = mImage && mImage.getAttribute ? mImage.getAttribute('src') : null;
+                if (!src) return;
+                mViewerImg.src = src;
+                mViewerImg.alt = (mTitle && mTitle.textContent) || 'Report image';
+                mViewer.classList.add('open');
+                mViewer.removeAttribute('hidden');
+            } catch (e) {}
+        }
+        function closeImageViewer(){
+            if (!mViewer || !mViewerImg) return;
+            mViewer.classList.remove('open');
+            mViewer.setAttribute('hidden','hidden');
+            mViewerImg.removeAttribute('src');
+        }
+        if (mOpenFull) { mOpenFull.addEventListener('click', openImageViewer); }
+        if (mViewerClose) { mViewerClose.addEventListener('click', closeImageViewer); }
+        if (mViewer) { mViewer.addEventListener('click', function(e){ if (e.target === mViewer) closeImageViewer(); }); }
+        if (mDownload) {
+            mDownload.addEventListener('click', function(){
+                try {
+                    const src = mImage && mImage.getAttribute ? mImage.getAttribute('src') : null;
+                    if (!src) return;
+                    const a = document.createElement('a');
+                    a.href = src;
+                    var titleText = (mTitle && mTitle.textContent) || 'report-image';
+                    a.download = titleText.replace(/\s+/g,'-').toLowerCase() + '.jpg';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } catch (e) {}
+            });
+        }
+        if (modalBackdrop) { modalBackdrop.addEventListener('click', closeAdminReportModal); }
+        modalCloseButtons.forEach(b => b.addEventListener('click', closeAdminReportModal));
+        if (reportModal) reportModal.addEventListener('keydown', (e)=>{
+            if(e.key==='Escape'){
+                e.preventDefault();
+                if (mViewer && mViewer.classList.contains('open')) { closeImageViewer(); return; }
+                closeAdminReportModal();
+            }
+        });
         const toggle = document.getElementById('adminReportFilterToggle');
         const menu = document.getElementById('adminReportFilterMenu');
         const categorySelect = document.getElementById('adminFilterCategory');
@@ -347,13 +599,14 @@ foreach ($reports as $rpt) {
 
         // Core filter + sort logic
         function applyAdminFilters(sortMode){
-            const selectedCat = (categorySelect?.value || '').trim().toLowerCase();
+            const selectedCat = (((categorySelect ? categorySelect.value : '') || '').trim().toLowerCase());
             const activeStatusBtn = statusButtons.find(b=>b.classList.contains('active'));
             const selectedStatus = activeStatusBtn ? (activeStatusBtn.dataset.status || 'all') : 'all';
 
             const rows = Array.from(tableBody.querySelectorAll('tr'));
             rows.forEach(row => {
-                const catText = (row.querySelector('td[data-title="Category"]')?.textContent || '').trim().toLowerCase();
+                var catEl = row.querySelector('td[data-title="Category"]');
+                const catText = (((catEl ? catEl.textContent : '') || '').trim().toLowerCase());
                 const rowStatus = (row.dataset.status || '').trim().toLowerCase();
                 let show = true;
                 if (selectedCat && catText !== selectedCat) show = false;
@@ -374,7 +627,7 @@ foreach ($reports as $rpt) {
         }
 
         // Wire category change
-        categorySelect?.addEventListener('change', function(){ applyAdminFilters(); });
+    if (categorySelect) { categorySelect.addEventListener('change', function(){ applyAdminFilters(); }); }
 
         // Wire status buttons
         statusButtons.forEach(btn => {

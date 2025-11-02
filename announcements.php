@@ -154,14 +154,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $check = $conn->query("SHOW TABLES LIKE 'announcements'");
                 if ($check && $check->num_rows > 0) {
-                    // Move the announcement into archive table instead of permanently deleting
-                    // Preserve image_path references (do NOT unlink files) so archived rows
-                    // keep their media intact.
-                    $stmtA = $conn->prepare('INSERT INTO announcements_archive (id, title, body, image_path, created_at, updated_at, archived_at, archived_by) SELECT id, title, body, image_path, created_at, updated_at, NOW(), ? FROM announcements WHERE id = ?');
-                    $archiver = (int)(current_user()['id'] ?? 0);
-                    $stmtA->bind_param('ii', $archiver, $announcementId);
-                    $stmtA->execute();
-                    $stmtA->close();
+                    // Try to archive first if archive table exists; otherwise proceed with hard delete
+                    $shouldArchive = false;
+                    try {
+                        $checkArchive = $conn->query("SHOW TABLES LIKE 'announcements_archive'");
+                        $shouldArchive = ($checkArchive && $checkArchive->num_rows > 0);
+                    } catch (Throwable $ie) { $shouldArchive = false; }
+
+                    if ($shouldArchive) {
+                        try {
+                            $stmtA = $conn->prepare('INSERT INTO announcements_archive (id, title, body, image_path, created_at, updated_at, archived_at, archived_by) SELECT id, title, body, image_path, created_at, updated_at, NOW(), ? FROM announcements WHERE id = ?');
+                            $archiver = (int)(current_user()['id'] ?? 0);
+                            $stmtA->bind_param('ii', $archiver, $announcementId);
+                            $stmtA->execute();
+                            $stmtA->close();
+                        } catch (Throwable $ie) {
+                            // If archiving fails, continue with delete
+                        }
+                    }
 
                     $stmt = $conn->prepare('DELETE FROM announcements WHERE id = ?');
                     $stmt->bind_param('i', $announcementId);

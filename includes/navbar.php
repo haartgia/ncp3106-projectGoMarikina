@@ -14,6 +14,7 @@
   $isProfile = $currentPath === 'profile.php';
   $isAdmin = $currentPath === 'admin.php';
   $isAnnouncements = $currentPath === 'announcements.php';
+  $isArchives = $currentPath === 'archives.php';
 
   // When already on the dashboard we use in-page anchors; otherwise link back to index.
   $homeHref = $isHome ? '#top' : 'index.php#top';
@@ -24,23 +25,27 @@
 <div class="nav-scrim" aria-hidden="true"></div>
 
 <aside id="primary-sidebar" class="sidebar" aria-label="Primary navigation">
-  <?php $initials = is_logged_in() ? user_initials(current_user(), 'GU') : 'GU'; ?>
-  <div class="sidebar-profile" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" data-user-menu-toggle>
+  <?php 
+    $initials = is_logged_in() ? user_initials(current_user(), 'GU') : 'GU';
+    // Sidebar label: show role labels for guest/admin, keep initials for normal users
+    if (is_admin()) {
+      $profileLabel = 'Admin';
+    } elseif (is_logged_in()) {
+      $profileLabel = $initials; // retain initials for regular authenticated users
+    } else {
+      $profileLabel = 'Guest';
+    }
+  ?>
+  <div class="sidebar-profile">
     <div class="sidebar-avatar" aria-hidden="true">
       <!-- Show user initials inside the avatar circle -->
       <span style="font-weight:700;font-size:14px;"><?= htmlspecialchars($initials, ENT_QUOTES, 'UTF-8') ?></span>
     </div>
     <div class="sidebar-profile-text">
-      <span class="sidebar-greeting"><?= htmlspecialchars($initials, ENT_QUOTES, 'UTF-8') ?></span>
+      <span class="sidebar-greeting"><?= htmlspecialchars($profileLabel, ENT_QUOTES, 'UTF-8') ?></span>
     </div>
   </div>
 
-  <?php if (is_logged_in()): ?>
-  <div class="sidebar-user-menu" data-user-menu hidden>
-    <a href="profile.php" class="sidebar-user-item">Profile</a>
-    <a href="logout.php" class="sidebar-user-item danger">Log out</a>
-  </div>
-  <?php endif; ?>
 
   <nav class="sidebar-nav">
     <?php if (is_admin()): ?>
@@ -69,6 +74,16 @@
           </svg>
         </span>
         <span class="sidebar-label">Announcements</span>
+      </a>
+      <a class="sidebar-link<?= $isArchives ? ' active' : '' ?>" href="archives.php" data-nav-link<?= $isArchives ? ' aria-current="page"' : '' ?> data-section="archives">
+        <span class="sidebar-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/>
+            <line x1="9" y1="21" x2="9" y2="9" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </span>
+        <span class="sidebar-label">Archives</span>
       </a>
       <a class="sidebar-link<?= $isDashboard ? ' active' : '' ?>" href="dashboard.php" data-nav-link<?= $isDashboard ? ' aria-current="page"' : '' ?> data-section="dashboard">
         <span class="sidebar-icon" aria-hidden="true">

@@ -85,3 +85,135 @@ unset($_SESSION['login_error']);
 			<p class="auth-footer-copy auth-footer-signup" hidden>Already have an account? <a href="#" class="auth-link" data-auth-switch="login">Log in</a></p>
 		</div>
 	</section>
+
+	<!-- Forgot Password Modal -->
+	<div id="forgotPasswordModal" class="modal" hidden>
+		<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" style="max-width: 480px; border-radius: 16px; padding: 0;">
+			<div style="padding: 32px;">
+				<div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px;">
+					<div>
+						<h2 id="forgotPasswordTitle" style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;">Forgot Password?</h2>
+						<p style="font-size: 0.95rem; color: #64748b; margin: 0;">Enter your email to receive a password reset link.</p>
+					</div>
+					<button type="button" class="modal-close" id="forgotModalClose" aria-label="Close" style="margin: -8px -8px 0 0;">
+						<svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
+							<path d="M18 6 6 18M6 6l12 12"/>
+						</svg>
+					</button>
+				</div>
+
+				<div id="forgotMessageContainer"></div>
+
+				<form id="forgotPasswordForm">
+					<label class="auth-field" for="forgotEmail" style="margin-bottom: 24px;">
+						<span class="auth-field-label">Email Address</span>
+						<input type="email" id="forgotEmail" name="email" placeholder="your.email@example.com" required autocomplete="email" style="padding: 12px 16px; font-size: 1rem;" />
+					</label>
+
+					<div style="display: flex; gap: 12px;">
+						<button type="button" id="forgotCancelBtn" style="flex: 1; padding: 12px; background: #e2e8f0; color: #475569; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;">Cancel</button>
+						<button type="submit" id="forgotSubmitBtn" class="auth-submit" style="flex: 1; margin: 0;">Send Reset Link</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<script>
+	(function() {
+		const modal = document.getElementById('forgotPasswordModal');
+		const form = document.getElementById('forgotPasswordForm');
+		const messageContainer = document.getElementById('forgotMessageContainer');
+		const closeBtn = document.getElementById('forgotModalClose');
+		const cancelBtn = document.getElementById('forgotCancelBtn');
+		const submitBtn = document.getElementById('forgotSubmitBtn');
+		const forgotLink = document.querySelector('[data-auth-action="forgot"]');
+
+		function showMessage(message, type = 'error') {
+			const className = type === 'success' ? 'auth-success' : 'auth-error';
+			messageContainer.innerHTML = `<p class="${className}" role="alert" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem;">${message}</p>`;
+		}
+
+		function clearMessage() {
+			messageContainer.innerHTML = '';
+		}
+
+		function openModal() {
+			clearMessage();
+			form.reset();
+			modal.hidden = false;
+			document.body.classList.add('modal-open');
+			document.getElementById('forgotEmail').focus();
+		}
+
+		function closeModal() {
+			modal.hidden = true;
+			document.body.classList.remove('modal-open');
+			clearMessage();
+		}
+
+		if (forgotLink) {
+			forgotLink.addEventListener('click', (e) => {
+				e.preventDefault();
+				openModal();
+			});
+		}
+
+		if (closeBtn) closeBtn.addEventListener('click', closeModal);
+		if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+		
+		modal?.addEventListener('click', (e) => {
+			if (e.target === modal) closeModal();
+		});
+
+		form?.addEventListener('submit', async (e) => {
+			e.preventDefault();
+			clearMessage();
+			
+			const email = document.getElementById('forgotEmail').value.trim();
+			if (!email) {
+				showMessage('Please enter your email address.');
+				return;
+			}
+
+			submitBtn.disabled = true;
+			submitBtn.textContent = 'Sending...';
+
+			try {
+				const formData = new FormData();
+				formData.append('email', email);
+
+				const response = await fetch('forgot-password.php', {
+					method: 'POST',
+					body: formData
+				});
+
+				const data = await response.json();
+
+				if (data.success) {
+					showMessage(data.message, 'success');
+					form.reset();
+					
+					// Show demo link in console for development
+					if (data.demo_link) {
+						console.log('🔐 Password Reset Link (Demo):', data.demo_link);
+						showMessage(data.message + ' Check browser console for the reset link (demo mode).', 'success');
+					}
+
+					// Close modal after 5 seconds
+					setTimeout(() => {
+						closeModal();
+					}, 5000);
+				} else {
+					showMessage(data.message || 'Failed to send reset link. Please try again.');
+				}
+			} catch (error) {
+				console.error('Forgot password error:', error);
+				showMessage('An error occurred. Please try again.');
+			} finally {
+				submitBtn.disabled = false;
+				submitBtn.textContent = 'Send Reset Link';
+			}
+		});
+	})();
+	</script>

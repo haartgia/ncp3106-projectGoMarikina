@@ -4,7 +4,7 @@ header('Access-Control-Allow-Origin: *');
 
 date_default_timezone_set('Asia/Manila'); // ensure PHP timestamps are PH time
 
-$default_ip = '172.20.10.2'; // ESP32 for Malanday
+$default_ip = '192.168.254.118'; // ESP32 for Malanday
 
 $barangay = $_GET['barangay'] ?? '';
 $esp32_ip_override = $_GET['ip'] ?? null; // optional override for testing

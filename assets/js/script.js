@@ -128,6 +128,181 @@ document.addEventListener('submit', async (e) => {
   if (ok) form.submit();
 });
 
+// Initialize simple announcements carousel (non-invasive)
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.announcements-carousel').forEach(carousel => {
+    const track = carousel.querySelector('.carousel-track');
+    const prev = carousel.querySelector('.carousel-prev');
+    const next = carousel.querySelector('.carousel-next');
+    if (!track) return;
+
+    // Ensure track is focusable for keyboard users
+    if (!track.hasAttribute('tabindex')) track.setAttribute('tabindex', '0');
+
+    const computeStep = () => {
+      const first = track.querySelector('.public-announcement-card');
+      const gap = parseInt(getComputedStyle(track).gap) || 20;
+      return first ? Math.round(first.getBoundingClientRect().width + gap) : Math.round(track.clientWidth * 0.9);
+    };
+
+    // Layout carousel so exactly one card is centered per view.
+    const layoutCarousel = () => {
+      const cards = Array.from(track.querySelectorAll('.public-announcement-card'));
+      if (!cards.length) return;
+      // Choose card width as 86% of track or max 920px to keep cards readable
+      const desired = Math.min(920, Math.round(track.clientWidth * 0.86));
+      cards.forEach(c => {
+        c.style.width = desired + 'px';
+        c.style.flex = '0 0 auto';
+      });
+      // Center the active card by adding side padding so the first/last can snap to center
+      const sidePad = Math.max(0, Math.round((track.clientWidth - desired) / 2));
+      track.style.paddingLeft = sidePad + 'px';
+      track.style.paddingRight = sidePad + 'px';
+    };
+
+    const scrollByStep = (dir) => {
+      const step = computeStep();
+      track.scrollBy({ left: dir * step, behavior: 'smooth' });
+    };
+
+    if (prev) prev.addEventListener('click', () => scrollByStep(-1));
+    if (next) next.addEventListener('click', () => scrollByStep(1));
+
+    // Hide or disable nav buttons when not needed and update on scroll/resize
+    const updateCarouselNav = () => {
+      if (!prev || !next) return;
+      const canScroll = track.scrollWidth > track.clientWidth + 1; // allow tiny rounding
+      // Show/hide buttons based on overflow
+      prev.hidden = next.hidden = !canScroll;
+      prev.disabled = !canScroll || track.scrollLeft <= 0;
+      // Consider near-end as scrolled to end
+      const atEnd = Math.abs(track.scrollLeft + track.clientWidth - track.scrollWidth) < 2;
+      next.disabled = !canScroll || atEnd;
+    };
+
+    // Update on user scroll and on resize so buttons reflect current state
+    track.addEventListener('scroll', () => requestAnimationFrame(updateCarouselNav));
+    // On resize, recompute layout (card widths and track padding) then update nav
+    window.addEventListener('resize', () => requestAnimationFrame(() => { layoutCarousel(); updateCarouselNav(); }));
+    // Recompute layout when images load in the track to avoid layout flashes
+    Array.from(track.querySelectorAll('img')).forEach(img => {
+      if (!img.complete) img.addEventListener('load', () => requestAnimationFrame(() => { layoutCarousel(); updateCarouselNav(); }));
+    });
+    // Initial layout + nav update
+    setTimeout(() => { layoutCarousel(); updateCarouselNav(); }, 30);
+
+    // Keyboard support on the carousel container
+    carousel.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); if (prev) prev.click(); }
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); if (next) next.click(); }
+    });
+
+    // Resize observer to adjust when layout changes
+    let ro;
+    try {
+      ro = new ResizeObserver(() => { /* noop - computeStep reads sizes live */ });
+      ro.observe(track);
+    } catch (e) { /* ResizeObserver may not be available; safe to ignore */ }
+  });
+});
+
+// Lightweight vanilla carousel for #announcementsCarousel when Bootstrap isn't present
+(function initAnnouncementsCarousel(){
+  if (typeof document === 'undefined') return;
+  document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('announcementsCarousel');
+    if (!root) return;
+    // If Bootstrap's Carousel is present, prefer it
+    if (window.bootstrap && typeof window.bootstrap.Carousel === 'function') return;
+
+  const inner = root.querySelector('.carousel-inner');
+    if (!inner) return;
+    const items = Array.from(inner.querySelectorAll('.carousel-item'));
+    const indicators = Array.from(root.querySelectorAll('.carousel-indicators button'));
+    const btnPrev = root.querySelector('.carousel-control-prev');
+    const btnNext = root.querySelector('.carousel-control-next');
+    if (!items.length) return;
+
+    let current = items.findIndex(i => i.classList.contains('active'));
+    if (current < 0) current = 0;
+
+    // Make root focusable so keyboard listeners work
+    if (!root.hasAttribute('tabindex')) {
+      try { root.setAttribute('tabindex', '0'); } catch (e) { /* ignore */ }
+    }
+
+    const show = (index) => {
+      index = (index + items.length) % items.length;
+      items.forEach((it, i) => {
+        it.classList.toggle('active', i === index);
+        it.setAttribute('aria-hidden', i === index ? 'false' : 'true');
+      });
+      indicators.forEach((btn, i) => {
+        if (i === index) { btn.classList.add('active'); btn.setAttribute('aria-current', 'true'); }
+        else { btn.classList.remove('active'); btn.removeAttribute('aria-current'); }
+      });
+      current = index;
+    };
+
+    // Prev / Next handlers (buttons removed, but keep for potential future use)
+    btnPrev && btnPrev.addEventListener('click', (e) => { e.preventDefault(); show(current - 1); });
+    btnNext && btnNext.addEventListener('click', (e) => { e.preventDefault(); show(current + 1); });
+
+    // Indicators
+    indicators.forEach((btn, i) => btn.addEventListener('click', (e) => { e.preventDefault(); show(i); }));
+
+    // Keyboard navigation
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); show(current - 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); show(current + 1); }
+    });
+
+    // Touch swipe support
+    let touchStartX = null;
+    inner.addEventListener('touchstart', (e) => { touchStartX = e.touches && e.touches[0] ? e.touches[0].clientX : null; }, { passive: true });
+    inner.addEventListener('touchend', (e) => {
+      if (touchStartX === null) return;
+      const endX = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : null;
+      if (endX === null) return;
+      const dx = endX - touchStartX;
+      if (Math.abs(dx) > 40) {
+        if (dx < 0) show(current + 1); else show(current - 1);
+      }
+      touchStartX = null;
+    });
+
+    // Auto-slide functionality
+    let autoSlideInterval = null;
+    const startAutoSlide = () => {
+      // Get interval from data attribute or default to 5000ms
+      const interval = parseInt(root.getAttribute('data-bs-interval')) || 5000;
+      autoSlideInterval = setInterval(() => {
+        show(current + 1);
+      }, interval);
+    };
+
+    const stopAutoSlide = () => {
+      if (autoSlideInterval) {
+        clearInterval(autoSlideInterval);
+        autoSlideInterval = null;
+      }
+    };
+
+    // Pause auto-slide on hover or when user interacts
+    root.addEventListener('mouseenter', stopAutoSlide);
+    root.addEventListener('mouseleave', startAutoSlide);
+    inner.addEventListener('touchstart', stopAutoSlide);
+    inner.addEventListener('touchend', () => { setTimeout(startAutoSlide, 3000); });
+
+    // Ensure initial state and start auto-slide
+    show(current);
+    if (items.length > 1) {
+      startAutoSlide();
+    }
+  });
+})();
+
 // Add bottom 'View all activity' bar
 // (Removed bottom activity bar per user request)
 
@@ -406,30 +581,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  /* Masonry-like row-major layout (JS Masonry) to ensure expanding a card only
-     moves items beneath it, not the entire row. We enable Masonry at a
-     configurable breakpoint and destroy it for small screens so the native
-     responsive grid is used there. */
+  /* ========================================================================
+     MASONRY GRID LAYOUT FOR REPORTS
+     ========================================================================
+     Purpose: Implements Masonry.js layout to display report cards in a
+              responsive grid. Ensures cards expand vertically without affecting
+              entire rows, providing a Pinterest-like layout.
+     
+     Features:
+     - Auto-initializes on page load
+     - Re-initializes on page navigation (back/forward, tab switching)
+     - Handles browser cache scenarios
+     - Automatically recalculates on window resize
+     ======================================================================== */
   (function initMasonryResponsive(){
     if (!reportsList) return;
-  const DESIRED_COLS = 3; // always try to keep 3 columns
-  const MIN_CARD_WIDTH = 210; // allow a bit narrower to avoid dropping to 2 cols
-  const WIDTH_FUDGE = 24; // extra slack so scrollbars/rounding don't drop a column
+
+    // Configuration constants
+    const DESIRED_COLS = 3;        // Target: 3 columns for optimal viewing
+    const MIN_CARD_WIDTH = 210;    // Minimum card width before reducing columns
+    const WIDTH_FUDGE = 24;        // Extra padding for scrollbars/rounding errors
+
+    // State variables
     let masonry = null;
     let imagesLoadedLib = null;
+    let resizeTimer = null;
 
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Dynamically loads external JavaScript libraries
+     * @param {string} src - URL of the script to load
+     */
     const loadScript = (src) => new Promise((resolve, reject) => {
+      // Skip if already loaded
       if (document.querySelector(`script[src="${src}"]`)) return resolve();
-      const s = document.createElement('script');
-      s.src = src;
-      s.async = true;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
+      
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(script);
     });
 
+    /**
+     * Ensures Masonry.js and imagesLoaded libraries are loaded
+     * Loads from CDN if not already available
+     */
     const ensureLibs = async () => {
-      // imagesLoaded then Masonry (unpkg CDN)
       if (typeof imagesLoaded === 'undefined') {
         await loadScript('https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js');
       }
@@ -439,129 +641,273 @@ document.addEventListener('DOMContentLoaded', () => {
       imagesLoadedLib = window.imagesLoaded;
     };
 
+    /**
+     * Calculates optimal column width based on container size
+     * Returns: { cols, colWidth, gap }
+     */
+    const computeColMetrics = () => {
+      const gap = parseInt(getComputedStyle(reportsList).gap || 24, 10) || 24;
+      const containerWidth = Math.max(320, 
+        reportsList.clientWidth || 
+        reportsList.offsetWidth || 
+        document.documentElement.clientWidth
+      );
+      
+      // Start with 3 columns, reduce if cards would be too narrow
+      let cols = DESIRED_COLS;
+      const widthFor = (c) => Math.floor(((containerWidth - WIDTH_FUDGE) - gap * (c - 1)) / c);
+      let colWidth = widthFor(cols);
+      
+      while (cols > 1 && colWidth < MIN_CARD_WIDTH) {
+        cols -= 1;
+        colWidth = widthFor(cols);
+      }
+      
+      return { cols, colWidth, gap };
+    };
+
+    /**
+     * Applies calculated column width to all report cards
+     */
+    const applyColMetrics = ({ colWidth }) => {
+      Array.from(reportsList.querySelectorAll('.report-card')).forEach((card) => {
+        card.style.width = colWidth + 'px';
+      });
+      // Update Masonry if already initialized
+      if (masonry) {
+        masonry.options.columnWidth = colWidth;
+      }
+    };
+
+    // ========================================================================
+    // MASONRY ENABLE/DISABLE FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Disables and cleans up Masonry instance
+     * Removes all positioning styles and observers
+     */
+    const disable = () => {
+      // Disconnect observers and destroy Masonry instance
+      if (masonry) {
+        try {
+          if (masonry.__gomkObserver) masonry.__gomkObserver.disconnect();
+          if (masonry.__gomkResizeObserver) masonry.__gomkResizeObserver.disconnect();
+          masonry.destroy();
+        } catch (e) { /* ignore errors */ }
+        masonry = null;
+      }
+      
+      // Clean up global references
+      window.__gomkMasonry = null;
+      try { delete window.__gomkScheduleMasonryLayout; } catch (e) {}
+      
+      // Remove Masonry class and reset card styles
+      if (reportsList) {
+        reportsList.classList.remove('gomk-masonry-active');
+        Array.from(reportsList.querySelectorAll('.report-card')).forEach((card) => {
+          card.style.removeProperty('width');
+          card.style.removeProperty('position');
+          card.style.removeProperty('top');
+          card.style.removeProperty('left');
+        });
+      }
+    };
+
+    /**
+     * Enables and initializes Masonry layout
+     * Loads libraries, calculates dimensions, and sets up observers
+     */
     const enable = async () => {
       if (!reportsList) return;
-      if (masonry) return; // already enabled
+
+      // Clean up any existing instance first (for page navigation scenarios)
+      disable();
+
+      // Load required libraries (Masonry.js and imagesLoaded)
       try {
         await ensureLibs();
       } catch (e) {
-        // gracefully fail: keep grid layout
+        // Gracefully fail: fall back to CSS grid layout
         return;
       }
-      // Helpers to compute and apply a near-3-column layout with min width
-      const computeColMetrics = () => {
-        const gap = parseInt(getComputedStyle(reportsList).gap || 24, 10) || 24;
-        const containerWidth = Math.max(320, reportsList.clientWidth || reportsList.offsetWidth || document.documentElement.clientWidth);
-        // Try desired 3 columns, fallback to 2/1 if cards would get too narrow
-        let cols = DESIRED_COLS;
-        const widthFor = (c) => Math.floor(((containerWidth - WIDTH_FUDGE) - gap * (c - 1)) / c);
-        let colWidth = widthFor(cols);
-        while (cols > 1 && colWidth < MIN_CARD_WIDTH) {
-          cols -= 1;
-          colWidth = widthFor(cols);
-        }
-        return { cols, colWidth, gap };
-      };
 
-      const applyColMetrics = ({ colWidth }) => {
-        Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
-          c.style.width = colWidth + 'px';
-        });
-        if (masonry) {
-          masonry.options.columnWidth = colWidth;
-        }
-      };
-
+      // Calculate and apply column metrics
       const metrics = computeColMetrics();
       applyColMetrics(metrics);
 
-  // Mark container so CSS doesn't keep grid behavior interfering
-  reportsList.classList.add('gomk-masonry-active');
+      // Add class to switch from CSS grid to block layout (required for Masonry)
+      reportsList.classList.add('gomk-masonry-active');
 
-  // Initialize Masonry with a numeric columnWidth
+      // Initialize Masonry instance
       masonry = new Masonry(reportsList, {
         itemSelector: '.report-card',
         columnWidth: metrics.colWidth,
-        percentPosition: false,
-        gutter: metrics.gap,
-        horizontalOrder: true,
-        transitionDuration: 0
+        percentPosition: false,      // Use pixel positioning
+        gutter: metrics.gap,         // Spacing between cards
+        horizontalOrder: true,       // Fill rows left-to-right
+        transitionDuration: 0        // No animation
       });
+      
+      // Store globally for other modules to access
       window.__gomkMasonry = masonry;
 
-      // Debounced/scheduled layout helper to avoid layout thrash
+      // ========================================================================
+      // LAYOUT SCHEDULING (Performance optimization)
+      // ========================================================================
+      
+      /**
+       * Schedules Masonry layout update using requestAnimationFrame
+       * Prevents layout thrashing when multiple updates occur rapidly
+       */
       let layoutScheduled = false;
       const scheduleLayout = () => {
-        if (!masonry) return;
-        if (layoutScheduled) return;
+        if (!masonry || layoutScheduled) return;
         layoutScheduled = true;
         requestAnimationFrame(() => {
           layoutScheduled = false;
-          try { masonry.layout(); } catch (e) { /* ignore */ }
+          try {
+            if (masonry) masonry.layout();
+          } catch (e) { /* ignore */ }
         });
       };
-      // expose for other modules (filters, see-more, etc.)
+
+      // Expose scheduleLayout for other modules (filters, modals, etc.)
       window.__gomkScheduleMasonryLayout = scheduleLayout;
-      // expose a recompute helper for resize
+
+      /**
+       * Recomputes column widths and triggers layout update
+       * Called on window resize or when container size changes
+       */
       window.__gomkRecomputeMasonryCols = () => {
         if (!masonry) return;
-        const m = computeColMetrics();
-        applyColMetrics(m);
+        const newMetrics = computeColMetrics();
+        applyColMetrics(newMetrics);
         scheduleLayout();
       };
 
-      // Wait for images then layout (scheduled)
+      // ========================================================================
+      // OBSERVERS FOR AUTOMATIC LAYOUT UPDATES
+      // ========================================================================
+
+      // Wait for images to load, then trigger layout
       imagesLoadedLib(reportsList, () => scheduleLayout());
 
-      // Observe mutations (cards show/hide) and schedule relayout.
-      // IMPORTANT: do NOT observe attributes to avoid loops from Masonry's own
-      // inline style updates during layout.
-      const mo = new MutationObserver(() => scheduleLayout());
-      mo.observe(reportsList, { childList: true, subtree: true });
-      masonry.__gomkObserver = mo;
+      // Observe DOM changes (cards added/removed/hidden)
+      // NOTE: Only observe childList to avoid infinite loops from Masonry's
+      // own inline style updates
+      const mutationObserver = new MutationObserver(() => scheduleLayout());
+      mutationObserver.observe(reportsList, { childList: true, subtree: true });
+      masonry.__gomkObserver = mutationObserver;
 
-      // Also observe size changes of individual cards (e.g., See more expand)
+      // Observe card size changes (e.g., when "See more" expands content)
       try {
-        const ro = new ResizeObserver(() => scheduleLayout());
-        Array.from(reportsList.querySelectorAll('.report-card')).forEach((el) => ro.observe(el));
-        masonry.__gomkResizeObserver = ro;
-      } catch (e) { /* ResizeObserver may be unavailable in very old browsers */ }
+        const resizeObserver = new ResizeObserver(() => scheduleLayout());
+        Array.from(reportsList.querySelectorAll('.report-card')).forEach((card) => {
+          resizeObserver.observe(card);
+        });
+        masonry.__gomkResizeObserver = resizeObserver;
+      } catch (e) {
+        // ResizeObserver not available in very old browsers
+      }
     };
 
-    const disable = () => {
-      if (!masonry) return;
-      try {
-        if (masonry.__gomkObserver) masonry.__gomkObserver.disconnect();
-        if (masonry.__gomkResizeObserver) masonry.__gomkResizeObserver.disconnect();
-        masonry.destroy();
-      } catch (e) { /* ignore */ }
-      // remove inline widths we set
-      Array.from(reportsList.querySelectorAll('.report-card')).forEach((c) => {
-        c.style.removeProperty('width');
-      });
-      reportsList.classList.remove('gomk-masonry-active');
-      masonry = null;
-      window.__gomkMasonry = null;
-      try { delete window.__gomkScheduleMasonryLayout; } catch (e) {}
+    // ========================================================================
+    // INITIALIZATION AND REINITIALIZATION
+    // ========================================================================
+
+    /**
+     * Main function to disable old instance and enable fresh one
+     * Used when page is navigated to ensure clean state
+     */
+    const reinitialize = () => {
+      if (!reportsList) return;
+      disable();
+      // Small delay ensures cleanup completes before reinitializing
+      setTimeout(() => {
+        enable().then(() => {
+          // Recompute after initialization completes
+          if (typeof window.__gomkRecomputeMasonryCols === 'function') {
+            window.__gomkRecomputeMasonryCols();
+          }
+        }).catch(() => { /* ignore */ });
+      }, 50);
     };
 
-    // Responsive toggling
-    let resizeTimer = null;
-    const check = () => {
-      // Always enable Masonry and recompute columns on resize
-      enable();
-      try {
-        if (typeof window.__gomkRecomputeMasonryCols === 'function') {
-          window.__gomkRecomputeMasonryCols();
-        }
-      } catch (e) { /* ignore */ }
+    /**
+     * Verifies Masonry state is consistent
+     * Detects broken states (class present but no instance, or vice versa)
+     */
+    const verifyMasonry = () => {
+      if (!reportsList) return;
+      
+      const hasCards = reportsList.querySelectorAll('.report-card').length > 0;
+      const hasActiveClass = reportsList.classList.contains('gomk-masonry-active');
+      const hasInstance = masonry !== null && window.__gomkMasonry !== null;
+      
+      // State mismatch detected - reinitialize
+      if (hasCards && ((hasActiveClass && !hasInstance) || (!hasActiveClass && hasInstance))) {
+        reinitialize();
+      }
     };
 
-    check();
+    // ========================================================================
+    // EVENT LISTENERS FOR PAGE NAVIGATION
+    // ========================================================================
+
+    // Initial setup
+    reinitialize();
+
+    // Handle page visibility changes (tab switching, minimize/restore)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && reportsList) {
+        setTimeout(() => {
+          verifyMasonry();
+          reinitialize();
+        }, 100);
+      }
+    });
+
+    // Handle window focus (returning to tab)
+    window.addEventListener('focus', () => {
+      if (reportsList && reportsList.querySelectorAll('.report-card').length > 0) {
+        setTimeout(() => {
+          verifyMasonry();
+          reinitialize();
+        }, 100);
+      }
+    });
+
+    // Handle window resize (debounced for performance)
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(check, 150);
+      resizeTimer = setTimeout(() => {
+        verifyMasonry();
+        reinitialize();
+      }, 150);
     });
+
+    // Handle browser back/forward navigation (pageshow fires on cached pages)
+    window.addEventListener('pageshow', () => {
+      // Always reinitialize to handle browser cache scenarios
+      setTimeout(() => {
+        disable();
+        reinitialize();
+      }, 50);
+    });
+
+    // Monitor DOM changes for layout issues
+    if (reportsList) {
+      const domObserver = new MutationObserver(() => {
+        if (reportsList.querySelectorAll('.report-card').length > 0) {
+          setTimeout(verifyMasonry, 100);
+        }
+      });
+      domObserver.observe(reportsList, {
+        childList: true,      // Watch for cards added/removed
+        subtree: false        // Don't watch nested elements
+      });
+    }
   })();
 
   searchForm?.addEventListener('submit', (event) => {
@@ -1282,6 +1628,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (navScrim) navScrim.setAttribute('hidden', 'hidden');
       } catch (e) { /* noop */ }
     };
+
+    // Auto-close navbar when clicking on navigation links (mobile only)
+    const navLinks = Array.from(document.querySelectorAll('[data-nav-link]'));
+    navLinks.forEach((link) => {
+      link.addEventListener('click', () => {
+        if (navMediaQuery.matches) {
+          closeMobileNav();
+        }
+      });
+    });
 
     const handleNavMediaChange = () => {
       if (!navMediaQuery.matches) {

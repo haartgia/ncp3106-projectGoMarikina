@@ -60,6 +60,7 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GO! MARIKINA</title>
+    <!-- removed external framework to use a lightweight in-project carousel -->
     <link rel="stylesheet" href="./assets/css/style.css">
 </head>
 <body id="top">
@@ -162,24 +163,35 @@ try {
                 </div>
 
                 <?php if ($announcements): ?>
-                    <div class="announcements-grid">
-                        <?php foreach (array_reverse($announcements) as $announcement): ?>
-                            <article class="public-announcement-card" data-announcement-id="<?php echo (int) $announcement['id']; ?>">
-                                <header class="public-announcement-card__header">
-                                    <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
-                                    <time datetime="<?php echo htmlspecialchars(format_datetime_attr($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?>">Published <?php echo htmlspecialchars(format_datetime_display($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?></time>
-                                </header>
-                                <?php if (!empty($announcement['image'])): ?>
-                                    <figure class="public-announcement-card__media">
-                                        <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars(($announcement['title'] ?? '') . ' image', ENT_QUOTES, 'UTF-8'); ?>">
-                                    </figure>
-                                <?php endif; ?>
-                                <p class="public-announcement-card__body"><?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?></p>
-                                <footer class="public-announcement-card__footer">
-                                    <button type="button" class="public-announcement-link" onclick="openAnnouncementsModal()">View all announcements</button>
-                                </footer>
-                            </article>
-                        <?php endforeach; ?>
+                    <?php $annRev = array_values(array_reverse($announcements)); ?>
+                    <div id="announcementsCarousel" class="carousel slide announcements-carousel" data-bs-ride="carousel" data-bs-interval="5000">
+                        <div class="carousel-indicators">
+                            <?php foreach ($annRev as $i => $a): ?>
+                                <button type="button" data-bs-target="#announcementsCarousel" data-bs-slide-to="<?php echo $i; ?>" <?php if ($i === 0) echo 'class="active" aria-current="true"'; ?> aria-label="Slide <?php echo $i + 1; ?>"></button>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <div class="carousel-inner">
+                            <?php foreach ($annRev as $i => $announcement): ?>
+                                <div class="carousel-item <?php echo $i === 0 ? 'active' : ''; ?>">
+                                    <article class="public-announcement-card" role="group" aria-roledescription="slide" aria-label="Announcement <?php echo $i + 1; ?>" data-announcement-id="<?php echo (int) $announcement['id']; ?>">
+                                        <header class="public-announcement-card__header">
+                                            <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
+                                            <time datetime="<?php echo htmlspecialchars(format_datetime_attr($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?>">Published <?php echo htmlspecialchars(format_datetime_display($announcement['created_at'] ?? null), ENT_QUOTES, 'UTF-8'); ?></time>
+                                        </header>
+                                        <?php if (!empty($announcement['image'])): ?>
+                                            <figure class="public-announcement-card__media">
+                                                <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars(($announcement['title'] ?? '') . ' image', ENT_QUOTES, 'UTF-8'); ?>">
+                                            </figure>
+                                        <?php endif; ?>
+                                        <p class="public-announcement-card__body"><?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?></p>
+                                        <footer class="public-announcement-card__footer">
+                                            <button type="button" class="public-announcement-link" onclick="openAnnouncementsModal()">View all announcements</button>
+                                        </footer>
+                                    </article>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 <?php else: ?>
                     <div class="announcements-empty">
@@ -488,6 +500,7 @@ try {
 
     <!-- MarkerCluster plugin for Leaflet (optional; script is loaded before app script) -->
     <script defer src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <!-- bootstrap removed; using lightweight vanilla carousel implementation in assets/js/script.js -->
     <script src="./assets/js/script.js" defer></script>
 </body>
 </html>

@@ -154,16 +154,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $check = $conn->query("SHOW TABLES LIKE 'announcements'");
                 if ($check && $check->num_rows > 0) {
-                    $stmt0 = $conn->prepare('SELECT image_path FROM announcements WHERE id = ?');
-                    $stmt0->bind_param('i', $announcementId);
-                    $stmt0->execute();
-                    $res0 = $stmt0->get_result();
-                    $row0 = $res0->fetch_assoc();
-                    $stmt0->close();
-                    if ($row0 && !empty($row0['image_path'])) {
-                        $imagePath = __DIR__ . '/' . $row0['image_path'];
-                        if (is_file($imagePath)) { @unlink($imagePath); }
-                    }
+                    // Move the announcement into archive table instead of permanently deleting
+                    // Preserve image_path references (do NOT unlink files) so archived rows
+                    // keep their media intact.
+                    $stmtA = $conn->prepare('INSERT INTO announcements_archive (id, title, body, image_path, created_at, updated_at, archived_at, archived_by) SELECT id, title, body, image_path, created_at, updated_at, NOW(), ? FROM announcements WHERE id = ?');
+                    $archiver = (int)(current_user()['id'] ?? 0);
+                    $stmtA->bind_param('ii', $archiver, $announcementId);
+                    $stmtA->execute();
+                    $stmtA->close();
 
                     $stmt = $conn->prepare('DELETE FROM announcements WHERE id = ?');
                     $stmt->bind_param('i', $announcementId);

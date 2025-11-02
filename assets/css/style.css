@@ -1285,9 +1285,17 @@ body.nav-open .sidebar-logo {
    `gomk-masonry-active` on the `.reports-list` element. */
 .reports-list.gomk-masonry-active {
   display: block;
+  position: relative;
 }
 .reports-list.gomk-masonry-active .report-card {
   margin-bottom: 24px; /* space between stacked cards when Masonry is active */
+  position: relative;
+}
+
+/* Ensure grid layout is restored when Masonry is not active */
+.reports-list:not(.gomk-masonry-active) .report-card {
+  width: auto !important;
+  margin-bottom: 0 !important;
 }
 
 @media (max-width: 520px) {
@@ -1503,9 +1511,75 @@ body.nav-open .sidebar-logo {
   }
 
   .announcements-grid {
+    /* Carousel track fallback: when used as a grid (no JS), keep single column */
     display: grid;
     gap: 16px;
     grid-template-columns: 1fr;
+  }
+
+  /* Carousel styling: when used as a track (horizontal carousel) */
+.announcements-carousel {
+  position: relative;
+  padding: 0;
+  margin-top: clamp(12px, 2vw, 20px);
+}
+
+  .announcements-grid.carousel-track {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 6px;
+  }
+
+  /* hide native scrollbar for nicer look */
+  .announcements-grid.carousel-track::-webkit-scrollbar { display: none; }
+
+  .announcements-grid.carousel-track > .public-announcement-card {
+    scroll-snap-align: center;
+    /* JS will set the explicit width so the carousel shows one card at a time.
+       Use auto/flexible defaults here to avoid conflicting layout rules. */
+    flex: 0 0 auto;
+    width: auto;
+    box-sizing: border-box;
+  }
+
+  /* Carousel navigation buttons */
+  .carousel-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: none;
+    background: rgba(10,30,80,0.06);
+    color: #0b2a60;
+    box-shadow: 0 2px 8px rgba(12,38,74,0.06);
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .carousel-btn:focus { outline: 2px solid rgba(10,30,80,0.12); }
+
+  .carousel-prev { left: 8px; }
+  .carousel-next { right: 8px; }
+
+  /* Slight card elevation to emphasize the carousel effect */
+  .announcements-grid.carousel-track > .public-announcement-card {
+    transition: transform 220ms ease, box-shadow 220ms ease;
+  }
+
+  .announcements-grid.carousel-track > .public-announcement-card:focus,
+  .announcements-grid.carousel-track > .public-announcement-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 8px 28px rgba(12,38,74,0.12);
   }
 
   .public-announcement-card {
@@ -5035,12 +5109,11 @@ body.nav-open .nav-scrim {
 
 .announcement-card__media,
 .public-announcement-card__media {
-  overflow: hidden;
+  overflow: visible;
   border-radius: var(--radius-small);
   border: 1px solid rgba(13, 61, 135, 0.08);
   background: var(--surface-raised);
   position: relative;
-  min-height: 180px; /* Reduced height for report cards */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5051,8 +5124,9 @@ body.nav-open .nav-scrim {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 180px; /* Ensure consistent height */
-  object-fit: contain; /* Show full image */
+  max-width: 100%;
+  object-fit: contain; /* Show full image without cropping */
+  object-position: center;
 }
 
 /* Placeholder text style */
@@ -5213,9 +5287,13 @@ body.nav-open .nav-scrim {
   margin: 48px 0 56px;
   padding: clamp(24px, 4vw, 48px);
   border-radius: var(--radius-large);
-  background: linear-gradient(135deg, rgba(246, 249, 255, 0.96), rgba(227, 237, 255, 0.78));
+  /* Softer, more professional bluish background with subtle vignette */
+  background:
+    radial-gradient(1200px 600px at 100% 0%, rgba(22, 93, 216, 0.08), transparent 55%),
+    radial-gradient(1200px 600px at 0% 100%, rgba(16, 32, 63, 0.06), transparent 55%),
+    linear-gradient(135deg, rgba(243, 248, 255, 0.96), rgba(224, 236, 255, 0.82));
   border: 1px solid rgba(13, 61, 135, 0.08);
-  box-shadow: 0 28px 52px -36px rgba(13, 61, 135, 0.4);
+  box-shadow: 0 28px 52px -36px rgba(13, 61, 135, 0.35);
   position: relative;
   overflow: hidden;
 }
@@ -5336,28 +5414,123 @@ body.nav-open .nav-scrim {
 /* .announcements-count removed */
 
 .announcements-grid {
-  margin-top: clamp(22px, 4vw, 32px);
+  margin-top: clamp(12px, 2vw, 20px);
   display: grid;
-  gap: 22px;
+  gap: 5px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.announcements-carousel {
+  margin-top: clamp(12px, 2vw, 20px);
 }
 
 .public-announcement-card {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 22px;
-  border-radius: var(--radius-medium);
-  background: var(--surface);
+  padding: clamp(20px, 3.2vw, 32px);
+  border-radius: 26px;
+  background: linear-gradient(180deg, #ffffff, #fbfcff);
   border: 1px solid rgba(13, 61, 135, 0.08);
-  box-shadow: 0 22px 42px -34px rgba(13, 61, 135, 0.3);
+  box-shadow: 0 26px 60px -34px rgba(13, 61, 135, 0.24);
   transition: transform var(--transition), box-shadow var(--transition);
-  min-height: 220px;
+  min-height: 240px;
+  overflow: hidden; /* keep media corners nicely rounded */
+  position: relative; /* for internal decorative elements */
+}
+
+/* Ensure Bootstrap carousel shows one centered card per slide */
+#announcementsCarousel .carousel-item .public-announcement-card {
+  /* make the card visually larger but fluid: wider (90%) up to a larger max width */
+  width: 100%;
+  max-width: 1700px; /* increase max width so the card spans more horizontally */
+  margin: 0 auto; /* center inside the slide */
+  padding: 28px; /* slightly larger padding for scale */
+  /* keep original baseline height (do not change height) */
+  min-height: 260px;
+  box-shadow: 0 28px 56px -36px rgba(13, 61, 135, 0.28);
+}
+
+/* Smooth transitions for carousel items */
+#announcementsCarousel .carousel-inner {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 5px !important; /* room for indicators and shadow */
+  min-height: 320px; /* Maintain height during transitions */
+}
+
+#announcementsCarousel .carousel-item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 18px 0; /* vertical breathing room */
+  opacity: 0;
+  transform: translateX(30px) scale(0.96);
+  transition: opacity 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              transform 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+}
+
+#announcementsCarousel .carousel-item.active {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* Convenience gap variable so arrows sit neatly beside the dots */
+#announcementsCarousel { --ann-nav-gap: clamp(44px, 5vw, 84px); }
+
+/* Prev/Next controls - Hidden since auto-slide is enabled */
+#announcementsCarousel .carousel-control-prev,
+#announcementsCarousel .carousel-control-next {
+  display: none !important;
+}
+
+/* Indicators: position centered at the bottom of the carousel */
+#announcementsCarousel .carousel-indicators {
+  position: absolute;
+  left: 50%;
+  bottom: 20px; /* closer to the card */
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 6;
+  margin: 0;
+  padding: 0;
+}
+#announcementsCarousel .carousel-indicators button {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(10,30,80,0.18);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+#announcementsCarousel .carousel-indicators button.active {
+  background: #0f2a62;
+  box-shadow: 0 4px 10px rgba(10,30,80,0.16);
+  transform: scale(1.08);
+}
+
+/* Make controls keyboard-focus visible */
+#announcementsCarousel .carousel-control-prev:focus,
+#announcementsCarousel .carousel-control-next:focus,
+#announcementsCarousel .carousel-indicators button:focus {
+  outline: 3px solid rgba(13,61,135,0.12);
+  outline-offset: 2px;
 }
 
 .public-announcement-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 28px 52px -30px rgba(13, 61, 135, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 32px 66px -34px rgba(13, 61, 135, 0.34);
 }
 
 .public-announcement-card__header {
@@ -5367,27 +5540,56 @@ body.nav-open .nav-scrim {
 }
 
 .public-announcement-card__header h3 {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   color: var(--text-primary);
-  line-height: 1.35;
+  line-height: 1.3;
+  font-weight: 700;
+  /* Prevent overly long titles from blowing up card height */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .public-announcement-card__header time {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: #6c7a95;
+  letter-spacing: .02em;
 }
 
 .public-announcement-card__body {
   flex: 1 1 auto;
-  color: var(--text-primary);
+  color: var(--text-muted);
   font-size: 0.98rem;
   line-height: 1.6;
   white-space: pre-wrap;
+  /* keep preview compact and robust to long words */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .public-announcement-card__footer {
   display: flex;
   justify-content: flex-start;
+  margin-top: auto; /* pin link to bottom of card */
+  position: relative;
+  padding-top: 8px;
+}
+
+/* Subtle divider above the footer link for rhythm */
+.public-announcement-card__footer::before {
+  content: '';
+  position: absolute;
+  left: clamp(16px, 3vw, 28px);
+  right: clamp(16px, 3vw, 28px);
+  height: 1px;
+  margin-top: -14px;
+  background: linear-gradient(90deg, transparent, rgba(13,61,135,0.12), transparent);
 }
 
 .public-announcement-link {

@@ -22,11 +22,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_report') {
         $reportId = (int)($_POST['report_id'] ?? 0);
         if ($reportId) {
+            // Archive the report row first, preserving original data
+            try {
+                $archiver = (int)(current_user()['id'] ?? 0);
+                $stmtA = $conn->prepare('INSERT INTO reports_archive (id, user_id, title, category, description, location, image_path, status, created_at, updated_at, archived_at, archived_by) SELECT id, user_id, title, category, description, location, image_path, status, created_at, updated_at, NOW(), ? FROM reports WHERE id = ?');
+                $stmtA->bind_param('ii', $archiver, $reportId);
+                $stmtA->execute();
+                $stmtA->close();
+            } catch (Throwable $e) {
+                // If archiving fails, continue with delete but log feedback
+            }
+
             $stmt = $conn->prepare('DELETE FROM reports WHERE id = ?');
             $stmt->bind_param('i', $reportId);
             $stmt->execute();
             $stmt->close();
-            $_SESSION['admin_feedback'] = 'Report deleted.';
+            $_SESSION['admin_feedback'] = 'Report removed and archived.';
         }
     }
 
@@ -97,6 +108,14 @@ $inProgressRate = $totalReports > 0
     : 0;
 
 $latestReport = $reports[0] ?? null;
+
+// Build a unique list of categories for the admin filter menu
+$categories = [];
+foreach ($reports as $rpt) {
+    $lbl = category_label($rpt['category'] ?? '');
+    if ($lbl === '') continue;
+    if (!in_array($lbl, $categories, true)) $categories[] = $lbl;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -196,10 +215,47 @@ $latestReport = $reports[0] ?? null;
                         <h2 id="reports-heading">Live report queue</h2>
                         <p class="admin-section-subtitle">Update statuses as field teams respond and keep residents informed.</p>
                     </div>
-                    <div class="admin-section-tools" aria-hidden="true">
-                        <span class="admin-chip admin-chip--open">Unresolved</span>
-                        <span class="admin-chip admin-chip--progress">In progress</span>
-                        <span class="admin-chip admin-chip--resolved">Solved</span>
+                    <div class="admin-section-tools">
+                        <div class="reports-filter">
+                            <button type="button" id="adminReportFilterToggle" class="filter-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="adminReportFilterMenu">
+                                <span>Filter</span>
+                                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                    <path d="M4 5h16M7 12h10m-6 7h2" />
+                                </svg>
+                            </button>
+
+                            <div class="filter-menu" id="adminReportFilterMenu" role="menu" hidden>
+                                <div style="display:flex;flex-direction:column;gap:8px;min-width:220px;padding:6px 0;">
+                                    <div>
+                                        <div style="font-weight:600;margin-bottom:6px;color:var(--text);">Category</div>
+                                        <select id="adminFilterCategory" class="filter-option" aria-label="Filter by category">
+                                            <option value="">All categories</option>
+                                            <?php foreach ($categories as $cat): ?>
+                                                <option value="<?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <div style="font-weight:600;margin-bottom:6px;color:var(--text);">Submitted</div>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            <button type="button" class="filter-option" data-sort="newest">Newest</button>
+                                            <button type="button" class="filter-option" data-sort="oldest">Oldest</button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div style="font-weight:600;margin-bottom:6px;color:var(--text);">Status</div>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            <button type="button" class="filter-option active" data-status="all" role="menuitemradio" aria-checked="true">All</button>
+                                            <button type="button" class="filter-option" data-status="unresolved" role="menuitemradio" aria-checked="false">Unresolved</button>
+                                            <button type="button" class="filter-option" data-status="in_progress" role="menuitemradio" aria-checked="false">In Progress</button>
+                                            <button type="button" class="filter-option" data-status="solved" role="menuitemradio" aria-checked="false">Solved</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -218,7 +274,7 @@ $latestReport = $reports[0] ?? null;
                             </thead>
                             <tbody>
                                 <?php foreach ($reports as $report): ?>
-                                    <tr>
+                                    <tr data-status="<?php echo htmlspecialchars($report['status'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" data-submitted="<?php echo htmlspecialchars($report['submitted_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                         <td data-title="Title"><?php echo htmlspecialchars($report['title']); ?></td>
                                         <td data-title="Category"><?php echo htmlspecialchars(category_label($report['category'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td data-title="Reporter"><?php echo htmlspecialchars($report['reporter']); ?></td>
@@ -262,6 +318,86 @@ $latestReport = $reports[0] ?? null;
             </section>
         </main>
     </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function(){
+        const toggle = document.getElementById('adminReportFilterToggle');
+        const menu = document.getElementById('adminReportFilterMenu');
+        const categorySelect = document.getElementById('adminFilterCategory');
+        const tableBody = document.querySelector('.admin-table tbody');
+        if (!tableBody || !toggle || !menu) return;
+
+        const sortButtons = Array.from(menu.querySelectorAll('[data-sort]'));
+        const statusButtons = Array.from(menu.querySelectorAll('[data-status]'));
+
+        // Toggle menu visibility
+        toggle.addEventListener('click', function(e){
+            e.preventDefault();
+            const expanded = toggle.getAttribute('aria-expanded') === 'true';
+            menu.hidden = expanded;
+            toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        });
+
+        // Close when clicking outside
+        document.addEventListener('click', function(e){
+            if (menu.hidden) return;
+            if (menu.contains(e.target) || toggle.contains(e.target)) return;
+            menu.hidden = true;
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+
+        // Core filter + sort logic
+        function applyAdminFilters(sortMode){
+            const selectedCat = (categorySelect?.value || '').trim().toLowerCase();
+            const activeStatusBtn = statusButtons.find(b=>b.classList.contains('active'));
+            const selectedStatus = activeStatusBtn ? (activeStatusBtn.dataset.status || 'all') : 'all';
+
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            rows.forEach(row => {
+                const catText = (row.querySelector('td[data-title="Category"]')?.textContent || '').trim().toLowerCase();
+                const rowStatus = (row.dataset.status || '').trim().toLowerCase();
+                let show = true;
+                if (selectedCat && catText !== selectedCat) show = false;
+                if (selectedStatus && selectedStatus !== 'all' && rowStatus !== selectedStatus) show = false;
+                row.style.display = show ? '' : 'none';
+            });
+
+            if (sortMode) {
+                // Sort only visible rows
+                const visibleRows = Array.from(tableBody.querySelectorAll('tr')).filter(r=>r.style.display !== 'none');
+                visibleRows.sort((a,b) => {
+                    const da = new Date(a.dataset.submitted || 0).getTime() || 0;
+                    const db = new Date(b.dataset.submitted || 0).getTime() || 0;
+                    return sortMode === 'newest' ? db - da : da - db;
+                });
+                visibleRows.forEach(r => tableBody.appendChild(r));
+            }
+        }
+
+        // Wire category change
+        categorySelect?.addEventListener('change', function(){ applyAdminFilters(); });
+
+        // Wire status buttons
+        statusButtons.forEach(btn => {
+            btn.addEventListener('click', function(){
+                statusButtons.forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-checked','false'); });
+                btn.classList.add('active'); btn.setAttribute('aria-checked','true');
+                applyAdminFilters();
+            });
+        });
+
+        // Wire sort buttons
+        sortButtons.forEach(btn => {
+            btn.addEventListener('click', function(){
+                sortButtons.forEach(b=>b.classList.remove('active'));
+                btn.classList.add('active');
+                applyAdminFilters(btn.dataset.sort || 'newest');
+            });
+        });
+
+        // Initial apply
+        applyAdminFilters();
+    });
+    </script>
     <script src="assets/js/script.js" defer></script>
 </body>
 </html>

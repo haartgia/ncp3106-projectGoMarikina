@@ -1950,6 +1950,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let notificationsOpen = false;
   let notificationsLoaded = false; // set to true only after a successful load
+  const AUTO_MARK_THRESHOLD = 12; // unread count at or below this will be auto-marked on close
+  let lastUnreadCount = 0; // from last successful fetch
+  let markedThisSession = false; // avoid duplicate mark calls while toggling
 
     // Toggle the "All caught up" state on the mark-read button
     const setCaughtUp = (caught) => {
@@ -1973,7 +1976,19 @@ document.addEventListener('DOMContentLoaded', () => {
       notificationPanel.hidden = !notificationsOpen;
       if (notificationsOpen) {
         notificationPanel?.focus?.({ preventScroll: true });
+        markedThisSession = false;
         if (!notificationsLoaded) loadNotifications();
+      } else {
+        // On close: if unread is small, auto-mark read on the server and update UI
+        if (!markedThisSession && notificationsLoaded && lastUnreadCount > 0 && lastUnreadCount <= AUTO_MARK_THRESHOLD) {
+          markedThisSession = true;
+          try { fetch('api/notifications_mark_read.php', { method: 'POST' }); } catch {}
+          if (notificationDot && !notificationDot.hasAttribute('hidden')) {
+            notificationDot.setAttribute('hidden', 'hidden');
+          }
+          if (typeof setCaughtUp === 'function') setCaughtUp(true);
+          lastUnreadCount = 0;
+        }
       }
     };
 
@@ -2029,6 +2044,86 @@ document.addEventListener('DOMContentLoaded', () => {
       fetch('api/notifications_mark_read.php', { method: 'POST' }).catch(() => {});
     });
 
+    // Clear all notifications button
+    const clearAllButton = notificationContainer.querySelector('[data-notification-clear-all]');
+    clearAllButton?.addEventListener('click', async () => {
+      // Confirm before clearing
+      let confirmed = true;
+      if (window.GOMK && window.GOMK.confirmDialog) {
+        confirmed = await window.GOMK.confirmDialog('Clear all notifications? This cannot be undone.', { okText: 'Clear All', cancelText: 'Cancel' });
+      } else {
+        confirmed = window.confirm('Clear all notifications? This cannot be undone.');
+      }
+      if (!confirmed) return;
+
+      clearAllButton.disabled = true;
+      const originalText = clearAllButton.textContent;
+      clearAllButton.textContent = 'Clearing...';
+
+      try {
+        // Get all notification IDs
+        const items = notificationList?.querySelectorAll('.notification-item');
+        if (!items || items.length === 0) {
+          clearAllButton.disabled = false;
+          clearAllButton.textContent = originalText;
+          return;
+        }
+
+        // Delete all notifications in parallel
+        const deletePromises = Array.from(items).map(async (item) => {
+          const deleteBtn = item.querySelector('.notification-delete');
+          const nid = deleteBtn?.dataset?.notificationId;
+          if (!nid) return Promise.resolve();
+
+          const fd = new FormData();
+          fd.append('notification_id', nid);
+          
+          try {
+            const response = await fetch('api/notifications_delete.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+            return response.ok ? Promise.resolve() : Promise.reject();
+          } catch (e) {
+            return Promise.reject(e);
+          }
+        });
+
+        await Promise.allSettled(deletePromises);
+
+        // Immediately update UI by clearing items from DOM
+        Array.from(items).forEach(item => item.remove());
+
+        // Show empty state
+        if (notificationList && notificationList.children.length === 0) {
+          notificationList.innerHTML = '<div class="notification-empty">No notifications yet.</div>';
+        }
+
+        // Update UI state
+        if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+        setCaughtUp(true);
+        lastUnreadCount = 0;
+        notificationsLoaded = true;
+
+        // Disable Clear All button since there are no notifications now
+        if (clearAllButton) {
+          clearAllButton.classList.add('is-disabled');
+          clearAllButton.setAttribute('aria-disabled', 'true');
+          clearAllButton.disabled = true;
+        }
+
+        if (window.GOMK && window.GOMK.showToast) {
+          window.GOMK.showToast('All notifications cleared', { type: 'success' });
+        }
+      } catch (e) {
+        if (window.GOMK && window.GOMK.showToast) {
+          window.GOMK.showToast('Failed to clear notifications', { type: 'error' });
+        } else {
+          alert('Failed to clear notifications');
+        }
+      } finally {
+        clearAllButton.disabled = false;
+        clearAllButton.textContent = originalText;
+      }
+    });
+
     // Fetch and render notifications for the signed-in user
     async function loadNotifications() {
       // show a tiny loading state
@@ -2046,8 +2141,15 @@ document.addEventListener('DOMContentLoaded', () => {
             notificationList.innerHTML = '<div class="notification-empty">Sign in to see your notifications.</div>';
           }
           if (notificationDot) notificationDot.setAttribute('hidden', 'hidden');
+          // Hide action buttons for guests
+          if (markReadButton) markReadButton.style.display = 'none';
+          if (clearAllButton) clearAllButton.style.display = 'none';
           return;
         }
+
+        // Show action buttons for authenticated users
+        if (markReadButton) markReadButton.style.display = '';
+        if (clearAllButton) clearAllButton.style.display = '';
 
         if (!data || data.success !== true) {
           notificationsLoaded = false; // allow retry if server returned an error
@@ -2068,13 +2170,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.is_read === 0 || item.is_read === false) {
               li.classList.add('is-unread');
             }
-            const iconClass = item.type === 'warning' ? 'warning' : (item.type === 'success' ? 'success' : item.type === 'error' ? 'error' : '');
+            const iconClass = item.type === 'warning' ? 'warning' : (item.type === 'success' ? 'success' : item.type === 'error' ? 'error' : 'info');
+            
+            // Pick appropriate icon based on type
+            let iconSvg = '';
+            if (item.type === 'success') {
+              iconSvg = '<path d="M7.5 12.5 10.8 15.5 16.5 9" />';
+            } else if (item.type === 'warning' || item.type === 'error') {
+              iconSvg = '<circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />';
+            } else {
+              iconSvg = '<circle cx="12" cy="12" r="10" /><path d="M12 8h.01" /><path d="M12 12v4" />';
+            }
+            
             li.innerHTML = `
               <div class="notification-icon ${iconClass}" aria-hidden="true">
                 <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 8h.01" />
-                  <path d="M12 12v4" />
+                  ${iconSvg}
                 </svg>
               </div>
               <div class="notification-content">
@@ -2154,13 +2265,45 @@ document.addEventListener('DOMContentLoaded', () => {
             notificationList.style.maxHeight = '';
             notificationList.style.overflowY = '';
           }
+
+          // Enable/disable Clear All button based on whether there are notifications
+          if (clearAllButton) {
+            if (data.data && data.data.length > 0) {
+              clearAllButton.classList.remove('is-disabled');
+              clearAllButton.removeAttribute('aria-disabled');
+              clearAllButton.disabled = false;
+            } else {
+              clearAllButton.classList.add('is-disabled');
+              clearAllButton.setAttribute('aria-disabled', 'true');
+              clearAllButton.disabled = true;
+            }
+          }
         }
 
+        lastUnreadCount = (data.unreadCount || 0);
         if (notificationDot) {
-          if ((data.unreadCount || 0) > 0) notificationDot.removeAttribute('hidden');
+          if (lastUnreadCount > 0) notificationDot.removeAttribute('hidden');
           else notificationDot.setAttribute('hidden', 'hidden');
         }
-        setCaughtUp(!data || (data.unreadCount || 0) === 0);
+
+        // Header action policy:
+        // - If unread > threshold: show actionable "Mark all as read"
+        // - Else: show disabled "All caught up"; items will be marked on panel close
+        if (markReadButton) {
+          if (lastUnreadCount > AUTO_MARK_THRESHOLD) {
+            markReadButton.hidden = false;
+            markReadButton.textContent = 'Mark all as read';
+            markReadButton.classList.remove('is-disabled');
+            markReadButton.removeAttribute('aria-disabled');
+          } else {
+            markReadButton.hidden = false; // keep the label spot
+            markReadButton.textContent = 'All caught up';
+            markReadButton.classList.add('is-disabled');
+            markReadButton.setAttribute('aria-disabled', 'true');
+          }
+        }
+
+        setCaughtUp(lastUnreadCount === 0);
         notificationsLoaded = true; // mark success
       } catch (e) {
         // network error: keep retry capability and show a friendly note

@@ -101,18 +101,45 @@ try {
                         <section class="notification-panel" id="dashboardNotifications" aria-labelledby="notificationPanelTitle" role="dialog" aria-modal="false" tabindex="-1" hidden data-notification-panel>
                             <header class="notification-panel-header">
                                 <h3 id="notificationPanelTitle">Notifications</h3>
-                                <button type="button" class="notification-action" data-notification-mark-read>Mark all as read</button>
+                                <div class="notification-actions">
+                                    <button type="button" class="notification-action" data-notification-mark-read>Mark all as read</button>
+                                    <button type="button" class="notification-action notification-action--clear" data-notification-clear-all>Clear all</button>
+                                </div>
                             </header>
                             <div class="notification-list" role="list">
-                                <article class="notification-item" role="listitem">
-                                    <div class="notification-icon" aria-hidden="true">
+                                <article class="notification-item is-unread" role="listitem">
+                                    <div class="notification-icon warning" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <line x1="12" y1="8" x2="12" y2="12" />
+                                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                                        </svg>
+                                    </div>
+                                    <div class="notification-content">
+                                        <p class="notification-title">Report status updated</p>
+                                        <p class="notification-meta">Uncollected Garbage Along Rivera Street — in progress</p>
+                                    </div>
+                                </article>
+                                <article class="notification-item is-unread" role="listitem">
+                                    <div class="notification-icon success" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                                             <path d="M7.5 12.5 10.8 15.5 16.5 9" />
                                         </svg>
                                     </div>
                                     <div class="notification-content">
-                                        <p class="notification-title">Road construction report resolved</p>
-                                        <p class="notification-meta">5 minutes ago · Barangay San Roque</p>
+                                        <p class="notification-title">Report status updated</p>
+                                        <p class="notification-meta">Request for Clean-Up Drive in Riverside Area — in progress</p>
+                                    </div>
+                                </article>
+                                <article class="notification-item" role="listitem">
+                                    <div class="notification-icon success" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                                            <path d="M7.5 12.5 10.8 15.5 16.5 9" />
+                                        </svg>
+                                    </div>
+                                    <div class="notification-content">
+                                        <p class="notification-title">Report status updated</p>
+                                        <p class="notification-meta">Damaged Drainage Along Mabini Street — solved</p>
                                     </div>
                                 </article>
                                 <article class="notification-item" role="listitem">

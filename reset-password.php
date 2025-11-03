@@ -86,204 +86,83 @@ $conn->close();
     <?php $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/'); ?>
     <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= time() ?>">
     <style>
-        .reset-container {
+        /* Page layout only; all UI inherits Auth theme classes */
+        .auth-page-wrap {
             min-height: 100vh;
             display: flex;
+            flex-direction: column; /* stack header above card */
             align-items: center;
             justify-content: center;
             padding: 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--surface);
         }
-        .reset-card {
-            background: white;
-            border-radius: 16px;
-            padding: 40px;
-            max-width: 440px;
-            width: 100%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        .reset-title {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #1e293b;
-            margin: 0 0 8px 0;
-            text-align: center;
-        }
-        .reset-subtitle {
-            font-size: 0.95rem;
-            color: #64748b;
-            margin: 0 0 32px 0;
-            text-align: center;
-        }
-        .reset-message {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            font-size: 0.9rem;
-        }
-        .reset-message.success {
-            background: #dcfce7;
-            color: #166534;
-            border: 1px solid #bbf7d0;
-        }
-        .reset-message.error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fecaca;
-        }
-        .reset-form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .reset-field {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .reset-label {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #334155;
-        }
-        .reset-input-wrapper {
-            position: relative;
-        }
-        .reset-input {
-            width: 100%;
-            padding: 12px 40px 12px 16px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: all 0.2s;
-        }
-        .reset-input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .reset-toggle {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 8px;
-            color: #64748b;
-        }
-        .reset-submit {
-            width: 100%;
-            padding: 14px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .reset-submit:hover {
-            background: #5568d3;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-        .reset-submit:disabled {
-            background: #cbd5e1;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .reset-footer {
-            margin-top: 24px;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #64748b;
-        }
-        .reset-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .reset-link:hover {
-            text-decoration: underline;
-        }
+        .inline-spacer { height: 12px; }
     </style>
 </head>
 <body>
-    <div class="reset-container">
-        <div class="reset-card">
-            <h1 class="reset-title">Reset Password</h1>
-            <p class="reset-subtitle">Enter your new password below</p>
-            
-            <?php if ($error): ?>
-                <div class="reset-message error"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
-            
-            <?php if ($success): ?>
-                <div class="reset-message success"><?= htmlspecialchars($success) ?></div>
-                <div class="reset-footer">
-                    <a href="profile.php" class="reset-link">← Back to Login</a>
-                </div>
-            <?php elseif (!$error): ?>
-                <form class="reset-form" method="POST">
-                    <div class="reset-field">
-                        <label class="reset-label" for="password">New Password</label>
-                        <div class="reset-input-wrapper">
-                            <input 
-                                type="password" 
-                                id="password" 
-                                name="password" 
-                                class="reset-input" 
-                                required 
-                                minlength="8"
-                                placeholder="Enter new password"
-                                autocomplete="new-password"
-                            >
-                            <button type="button" class="reset-toggle" onclick="togglePassword('password')">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                        </div>
+    <div class="auth-page-wrap">
+        <header class="auth-header auth-header--centered" aria-label="Go Marikina branding">
+            <img src="<?= $BASE ?>/uploads/blue_smallgomarikina.png" alt="GO! MARIKINA" class="auth-centered-logo" />
+        </header>
+        <section class="auth-content" aria-labelledby="reset-title">
+            <div class="auth-card" role="form">
+                <header class="auth-card-header">
+                    <h2 id="reset-title" class="auth-card-title">Reset Password</h2>
+                </header>
+
+                <?php if ($error): ?>
+                    <div class="inline-alert inline-alert--error" role="alert">
+                        <span class="inline-alert__icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        </span>
+                        <span><?= htmlspecialchars($error) ?></span>
                     </div>
-                    
-                    <div class="reset-field">
-                        <label class="reset-label" for="confirm_password">Confirm Password</label>
-                        <div class="reset-input-wrapper">
-                            <input 
-                                type="password" 
-                                id="confirm_password" 
-                                name="confirm_password" 
-                                class="reset-input" 
-                                required 
-                                minlength="8"
-                                placeholder="Confirm new password"
-                                autocomplete="new-password"
-                            >
-                            <button type="button" class="reset-toggle" onclick="togglePassword('confirm_password')">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                        </div>
+                <?php endif; ?>
+
+                <?php if ($success): ?>
+                    <div class="inline-alert inline-alert--success" role="alert">
+                        <span class="inline-alert__icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                        <span><?= htmlspecialchars($success) ?></span>
                     </div>
-                    
-                    <button type="submit" class="reset-submit">Reset Password</button>
-                </form>
-                
-                <div class="reset-footer">
-                    <a href="profile.php" class="reset-link">← Back to Login</a>
-                </div>
-            <?php else: ?>
-                <div class="reset-footer">
-                    <a href="profile.php" class="reset-link">← Back to Login</a>
-                </div>
-            <?php endif; ?>
-        </div>
+                    <p class="auth-footer-copy"><a class="auth-link" href="profile.php">← Back to Login</a></p>
+                <?php elseif (!$error): ?>
+                    <form class="auth-form" method="POST">
+                        <label class="auth-field" for="password">
+                            <span class="auth-field-label">New Password</span>
+                            <div class="auth-field-input">
+                                <input type="password" id="password" name="password" placeholder="Enter new password" required minlength="8" autocomplete="new-password" />
+                                <button type="button" class="auth-field-toggle" aria-label="Show password" onclick="togglePassword('password')">
+                                    <svg viewBox="0 0 28 18" width="20" height="14" aria-hidden="true">
+                                        <rect x="1" y="1" rx="9" ry="9" width="26" height="16" fill="none" stroke="currentColor" stroke-width="2" />
+                                        <circle cx="14" cy="9" r="3" fill="currentColor" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </label>
+
+                        <label class="auth-field" for="confirm_password">
+                            <span class="auth-field-label">Confirm Password</span>
+                            <div class="auth-field-input">
+                                <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm new password" required minlength="8" autocomplete="new-password" />
+                                <button type="button" class="auth-field-toggle" aria-label="Show password" onclick="togglePassword('confirm_password')">
+                                    <svg viewBox="0 0 28 18" width="20" height="14" aria-hidden="true">
+                                        <rect x="1" y="1" rx="9" ry="9" width="26" height="16" fill="none" stroke="currentColor" stroke-width="2" />
+                                        <circle cx="14" cy="9" r="3" fill="currentColor" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </label>
+
+                        <button type="submit" class="auth-submit">Reset Password</button>
+                    </form>
+                    <p class="auth-footer-copy"><a class="auth-link" href="profile.php">← Back to Login</a></p>
+                <?php else: ?>
+                    <p class="auth-footer-copy"><a class="auth-link" href="profile.php">← Back to Login</a></p>
+                <?php endif; ?>
+            </div>
+        </section>
     </div>
     
     <script>

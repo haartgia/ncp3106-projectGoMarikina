@@ -119,15 +119,28 @@
         </span>
         <span class="sidebar-label">IoT Dashboard</span>
       </a>
-      <a class="sidebar-link<?= $isProfile ? ' active' : '' ?>" href="profile.php" data-nav-link<?= $isProfile ? ' aria-current="page"' : '' ?>>
-        <span class="sidebar-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
-          </svg>
-        </span>
-        <span class="sidebar-label">Profile</span>
-      </a>
+      <?php if (is_logged_in()): ?>
+        <a class="sidebar-link<?= $isProfile ? ' active' : '' ?>" href="profile.php" data-nav-link<?= $isProfile ? ' aria-current="page"' : '' ?>>
+          <span class="sidebar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3-6 8-6s8 2 8 6" />
+            </svg>
+          </span>
+          <span class="sidebar-label">Profile</span>
+        </a>
+      <?php else: ?>
+        <a class="sidebar-link" href="login.php" data-nav-link>
+          <span class="sidebar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+          </span>
+          <span class="sidebar-label">Login</span>
+        </a>
+      <?php endif; ?>
     <?php endif; ?>
   </nav>
 

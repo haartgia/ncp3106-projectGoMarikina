@@ -94,6 +94,93 @@ body.modal-open {
   transform: translateY(0);
 }
 
+/* Forgot Password modal (theme-aligned) */
+.forgot-modal-card {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-hard);
+  width: 95%;
+  max-width: 500px;
+  padding: 40px;
+  position: relative;
+}
+
+.forgot-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+}
+
+.forgot-desc {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0 0 8px 0;
+  line-height: 1.6;
+}
+
+.forgot-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+.forgot-close:hover { background: var(--border-soft); }
+
+.forgot-actions { display: flex; gap: 12px; }
+.btn-secondary {
+  flex: 1;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: .95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s ease;
+  letter-spacing: .025em;
+}
+.btn-secondary:hover { background: var(--border-soft); }
+
+/* Make primary action in modal match .auth-submit sizing but stay inline */
+.forgot-actions .auth-submit {
+  width: auto;
+  flex: 2;
+  padding: 18px;
+  margin-top: 0;
+}
+
+.btn-primary {
+  flex: 2; padding: 14px; border-radius: 12px; border: none; background: var(--sidebar-accent);
+  color: #fff; font-size: .95rem; font-weight: 700; cursor: pointer; transition: all .2s ease; letter-spacing: .025em;
+  box-shadow: 0 4px 12px -2px rgba(22,93,216,.5);
+}
+.btn-primary:hover { background: var(--sidebar-bg); transform: translateY(-2px); box-shadow: 0 8px 20px -4px rgba(22,93,216,.6); }
+.btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.forgot-footer {
+  margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: .875rem;
+}
+
+.inline-alert { display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border-radius:12px; margin-bottom:24px; font-size:.9rem; font-weight:500; }
+.inline-alert__icon { flex-shrink: 0; margin-top: 1px; }
+.inline-alert--success { background:#f0fdf4; color:#166534; border:2px solid #86efac; }
+.inline-alert--error { background:#fef2f2; color:#991b1b; border:2px solid #fca5a5; }
+
 .modal-header {
   padding: 12px 20px;
   margin: 0;
@@ -1007,7 +1094,8 @@ body.nav-open .sidebar-logo {
   position: absolute;
   top: calc(100% + 14px);
   right: 0;
-  width: 340px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
   padding: 20px 20px 16px;
   border-radius: 20px;
   background: var(--surface);
@@ -1048,10 +1136,26 @@ body.nav-open .sidebar-logo {
   color: var(--text-primary);
 }
 
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .notification-action {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--chip-blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.notification-action:hover:not(.is-disabled) {
+  background: rgba(28, 95, 219, 0.08);
 }
 
 .notification-action.is-disabled {
@@ -1060,23 +1164,50 @@ body.nav-open .sidebar-logo {
   pointer-events: none;
 }
 
+.notification-action--clear {
+  color: var(--chip-red);
+}
+
+.notification-action--clear:hover:not(.is-disabled) {
+  background: rgba(216, 69, 69, 0.08);
+}
+
 .notification-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
+.notification-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 .notification-item.is-unread {
   border-left: 4px solid var(--chip-blue);
-  padding-left: 10px; /* visually balance the thicker left border */
+  padding-left: 10px;
   background: linear-gradient(90deg, rgba(28,95,219,0.03), transparent);
 }
 
-/* Delete control shown on hover: a red pill on the right with an X */
 .notification-item {
   position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  padding: 14px 16px;
+  padding-right: 52px;
+  border-radius: 16px;
+  background: var(--surface-raised);
+  border: 1px solid rgba(22, 93, 216, 0.08);
+  transition: transform var(--transition), box-shadow var(--transition);
 }
 
+.notification-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px -24px rgba(10, 35, 90, 0.4);
+}
 
 .notification-delete {
   position: absolute;
@@ -1096,7 +1227,6 @@ body.nav-open .sidebar-logo {
   transition: opacity 120ms ease, transform 160ms ease;
 }
 
-/* show on hover or when the delete button receives focus (keyboard users) */
 .notification-item:hover .notification-delete,
 .notification-delete:focus,
 .notification-delete:focus-visible {
@@ -1105,35 +1235,14 @@ body.nav-open .sidebar-logo {
   transform: translateY(-50%) translateX(0);
 }
 
-/* keep room on the right so the delete button doesn't overlap content */
-.notification-item {
-  padding-right: 52px;
-}
-
 .notification-delete .sr-only {
   position: absolute !important;
   width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;
 }
 
-.notification-item {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: var(--surface-raised);
-  border: 1px solid rgba(22, 93, 216, 0.08);
-  transition: transform var(--transition), box-shadow var(--transition);
-}
-
-.notification-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 32px -24px rgba(10, 35, 90, 0.4);
-}
-
 .notification-icon {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 16px;
   background: rgba(46, 139, 87, 0.16);
   color: #2e8b57;
@@ -1160,6 +1269,15 @@ body.nav-open .sidebar-logo {
 .notification-icon.info {
   background: rgba(28, 95, 219, 0.16);
   color: var(--chip-blue);
+}
+
+.notification-icon.success {
+  background: rgba(46, 139, 87, 0.16);
+  color: #2e8b57;
+}
+
+.notification-content {
+  min-width: 0;
 }
 
 .notification-title {

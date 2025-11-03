@@ -12,6 +12,7 @@ $last_name  = trim($_POST['last_name'] ?? '');
 $mobile     = trim($_POST['mobile'] ?? '');
 $email      = trim($_POST['email'] ?? '');
 $password   = trim($_POST['password'] ?? '');
+$confirm_password = trim($_POST['confirm_password'] ?? '');
 
 
 if ($email === '' || $password === '' || $first_name === '' || $last_name === '' || $mobile === '') {
@@ -37,6 +38,13 @@ if (!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
 // Server-side: validate password: min 8, 1 uppercase, 1 number, 1 special, no spaces
 if (!preg_match('/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$/', $password)) {
     $_SESSION['login_error'] = 'Password must be 8+ characters, include an uppercase letter, a number, a special character, and no spaces.';
+    header('Location: profile.php');
+    exit;
+}
+
+// Server-side: confirm password must match
+if ($confirm_password === '' || $confirm_password !== $password) {
+    $_SESSION['login_error'] = 'Passwords do not match.';
     header('Location: profile.php');
     exit;
 }

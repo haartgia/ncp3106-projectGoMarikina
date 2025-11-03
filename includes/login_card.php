@@ -78,6 +78,17 @@ unset($_SESSION['login_error']);
 					</div>
 				</label>
 
+				<label class="auth-field" for="signupConfirmPassword">
+					<span class="auth-field-label">Confirm Password</span>
+					<div class="auth-field-input">
+						<input type="password" id="signupConfirmPassword" name="confirm_password" placeholder="Confirm Password" required autocomplete="new-password" data-password-field minlength="8" pattern="^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?!.*\s).{8,}$" title="Must match the password above" />
+						<button type="button" class="auth-field-toggle" data-password-toggle="signupConfirmPassword" aria-label="Show password">
+							<span class="auth-toggle-icon" aria-hidden="true"></span>
+						</button>
+					</div>
+				</label>
+				<p id="signupConfirmHint" class="auth-error" hidden>Passwords do not match.</p>
+
 				<button type="submit" class="auth-submit">Create Account</button>
 			</form>
 
@@ -88,34 +99,41 @@ unset($_SESSION['login_error']);
 
 	<!-- Forgot Password Modal -->
 	<div id="forgotPasswordModal" class="modal" hidden>
-		<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" style="max-width: 480px; border-radius: 16px; padding: 0;">
-			<div style="padding: 32px;">
-				<div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px;">
-					<div>
-						<h2 id="forgotPasswordTitle" style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;">Forgot Password?</h2>
-						<p style="font-size: 0.95rem; color: #64748b; margin: 0;">Enter your email to receive a password reset link.</p>
-					</div>
-					<button type="button" class="modal-close" id="forgotModalClose" aria-label="Close" style="margin: -8px -8px 0 0;">
-						<svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
-							<path d="M18 6 6 18M6 6l12 12"/>
-						</svg>
-					</button>
+		<div class="modal-content forgot-modal-card" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle">
+				
+
+				<div style="margin-bottom: 12px;">
+					<h2 id="forgotPasswordTitle" class="forgot-title">Reset Your Password</h2>
+					<p class="forgot-desc">No worries! Enter your email address and we'll send you a link to reset your password.</p>
 				</div>
+
+				<button type="button" id="forgotModalClose" aria-label="Close" class="forgot-close">
+					<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none">
+						<path d="M18 6 6 18M6 6l12 12"/>
+					</svg>
+				</button>
 
 				<div id="forgotMessageContainer"></div>
 
 				<form id="forgotPasswordForm">
-					<label class="auth-field" for="forgotEmail" style="margin-bottom: 24px;">
+					<label class="auth-field" for="forgotEmail" style="margin-bottom: 28px;">
 						<span class="auth-field-label">Email Address</span>
-						<input type="email" id="forgotEmail" name="email" placeholder="your.email@example.com" required autocomplete="email" style="padding: 12px 16px; font-size: 1rem;" />
+						<input type="email" id="forgotEmail" name="email" placeholder="you@example.com" required autocomplete="email" />
 					</label>
 
-					<div style="display: flex; gap: 12px;">
-						<button type="button" id="forgotCancelBtn" style="flex: 1; padding: 12px; background: #e2e8f0; color: #475569; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;">Cancel</button>
-						<button type="submit" id="forgotSubmitBtn" class="auth-submit" style="flex: 1; margin: 0;">Send Reset Link</button>
+					<div class="forgot-actions" style="align-items: stretch;">
+						<button type="button" id="forgotCancelBtn" class="btn-secondary">Cancel</button>
+						<button type="submit" id="forgotSubmitBtn" class="auth-submit">Send Reset Link</button>
 					</div>
 				</form>
-			</div>
+
+				<div class="forgot-footer">
+					<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" style="flex-shrink: 0;">
+						<circle cx="12" cy="12" r="10"/>
+						<path d="M12 16v-4m0-4h.01"/>
+					</svg>
+					<span>Remember your password? <a href="#" class="auth-link" onclick="document.getElementById('forgotModalClose').click(); return false;">Sign in</a></span>
+				</div>
 		</div>
 	</div>
 
@@ -130,8 +148,11 @@ unset($_SESSION['login_error']);
 		const forgotLink = document.querySelector('[data-auth-action="forgot"]');
 
 		function showMessage(message, type = 'error') {
-			const className = type === 'success' ? 'auth-success' : 'auth-error';
-			messageContainer.innerHTML = `<p class="${className}" role="alert" style="padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem;">${message}</p>`;
+			const isSuccess = type === 'success';
+			const icon = isSuccess
+				? '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"><polyline points="20 6 9 17 4 12"/></svg>'
+				: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+			messageContainer.innerHTML = `<div role=\"alert\" class=\"inline-alert ${isSuccess ? 'inline-alert--success' : 'inline-alert--error'}\"><span class=\"inline-alert__icon\">${icon}</span><span>${message}</span></div>`;
 		}
 
 		function clearMessage() {
@@ -141,13 +162,15 @@ unset($_SESSION['login_error']);
 		function openModal() {
 			clearMessage();
 			form.reset();
-			modal.hidden = false;
+			modal.removeAttribute('hidden');
+			modal.setAttribute('open', '');
 			document.body.classList.add('modal-open');
 			document.getElementById('forgotEmail').focus();
 		}
 
 		function closeModal() {
-			modal.hidden = true;
+			modal.removeAttribute('open');
+			modal.setAttribute('hidden', '');
 			document.body.classList.remove('modal-open');
 			clearMessage();
 		}
@@ -215,5 +238,18 @@ unset($_SESSION['login_error']);
 				submitBtn.textContent = 'Send Reset Link';
 			}
 		});
+
+		// Client-side confirm password check on signup form
+		const signupPwd = document.getElementById('signupPassword');
+		const signupConfirm = document.getElementById('signupConfirmPassword');
+        const signupConfirmHint = document.getElementById('signupConfirmHint');
+		function validateConfirm() {
+			if (!signupPwd || !signupConfirm) return;
+			const mismatch = signupConfirm.value && signupConfirm.value !== signupPwd.value;
+			signupConfirm.setCustomValidity(mismatch ? 'Passwords do not match' : '');
+			if (signupConfirmHint) signupConfirmHint.hidden = !mismatch;
+		}
+		signupPwd?.addEventListener('input', validateConfirm);
+		signupConfirm?.addEventListener('input', validateConfirm);
 	})();
 	</script>

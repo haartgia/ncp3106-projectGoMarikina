@@ -4,7 +4,7 @@ require __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_admin();
 
-// Non-JS fallback: allow status updates/deletes via POST to this page
+// Non-JS fallback: allow status updates/archives via POST to this page
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
             $_SESSION['admin_feedback'] = 'Report status updated.';
         }
-    } elseif ($action === 'delete_report') {
+    } elseif ($action === 'archive_report') {
         $reportId = (int)($_POST['report_id'] ?? 0);
         if ($reportId) {
             // Archive the report row first, preserving original data including lat/lng
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param('i', $reportId);
             $stmt->execute();
             $stmt->close();
-            $_SESSION['admin_feedback'] = 'Report removed and archived.';
+            $_SESSION['admin_feedback'] = 'Report archived successfully.';
         }
     }
 
@@ -314,17 +314,16 @@ foreach ($reports as $rpt) {
                                                 </svg>
                                                 <span>View</span>
                                             </button>
-                                            <form method="post" class="admin-inline-form" data-confirm-message="Delete this report?" style="display:inline;">
-                                                <input type="hidden" name="action" value="delete_report">
+                                            <form method="post" class="admin-inline-form" data-confirm-message="Archive this report?" style="display:inline;">
+                                                <input type="hidden" name="action" value="archive_report">
                                                 <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
-                                                <button type="submit" class="admin-delete" aria-label="Delete report">
+                                                <button type="submit" class="admin-delete" aria-label="Archive report">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-                                                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                        <path d="M20 7H4v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M3 7h18M9 3h6v4H9V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                                     </svg>
-                                                    <span>Delete</span>
+                                                    <span>Archive</span>
                                                 </button>
                                             </form>
                                         </td>

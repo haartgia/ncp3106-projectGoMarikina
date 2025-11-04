@@ -1,3 +1,20 @@
+/*
+ * App UI Script
+ *
+ * Sections overview (search these headers to navigate):
+ * - Announcements modal and carousel
+ * - Mobile navigation and navbar behavior
+ * - Notifications panel (fetch/list/mark read)
+ * - Reports UI helpers (layout/animations)
+ * - Admin inline actions (status updates)
+ * - Auth card toggles and validation helpers
+ *
+ * Conventions:
+ * - Progressive enhancement only; page works without JS.
+ * - data-* attributes as DOM hooks; minimal global state.
+ */
+
+// Announcements modal
 // Modal functionality
 const modal = document.getElementById('announcementsModal');
 
@@ -429,6 +446,74 @@ document.addEventListener('DOMContentLoaded', () => {
   let trackedBarangays = (function(){
     try { const s = JSON.parse(localStorage.getItem('gomk.trackedBarangays')||'[]'); return Array.isArray(s)?s:[]; } catch { return []; }
   })();
+
+  // Smooth pagination transitions for Announcements on announcements.php
+  (function initAnnouncementsPager() {
+    const announcementsSection = document.getElementById('announcements');
+    let list = document.getElementById('announcementsList');
+    let pager = document.getElementById('announcementsPager');
+    if (!announcementsSection || !list || !pager) return; // only on announcements page
+
+    const attach = () => {
+      if (!pager) return;
+      const links = Array.from(pager.querySelectorAll('a.pager-btn'));
+      links.forEach((a) => a.addEventListener('click', onClick));
+    };
+
+    const onClick = (e) => {
+      const a = e.currentTarget;
+      const disabled = a.getAttribute('aria-disabled') === 'true';
+      if (disabled) { e.preventDefault(); return; }
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // allow new-tab
+      e.preventDefault();
+      swapTo(a.href);
+    };
+
+    const swapTo = async (url) => {
+      try {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextList = doc.getElementById('announcementsList');
+        const nextPager = doc.getElementById('announcementsPager');
+        if (!nextList) { window.location.href = url; return; }
+
+        const doSwap = () => {
+          try { list.replaceWith(nextList); } catch (e) {}
+          if (pager && nextPager) { try { pager.replaceWith(nextPager); } catch (e) {} }
+          // Re-init references after swap
+          const newList = document.getElementById('announcementsList');
+          const newPager = document.getElementById('announcementsPager');
+          if (newList) list = newList;
+          if (newPager) pager = newPager;
+          // Smooth scroll back to section
+          announcementsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Focus first card for accessibility
+          newList?.querySelector('.announcement-card')?.focus?.();
+          // Re-attach listeners for the new pager
+          attach();
+        };
+
+        if (document.startViewTransition) {
+          document.startViewTransition(doSwap);
+        } else {
+          try { list.classList.add('is-out'); } catch (err) {}
+          setTimeout(doSwap, 120);
+        }
+
+        try { history.pushState({}, '', url); } catch (err) {}
+      } catch (err) {
+        window.location.href = url;
+      }
+    };
+
+    window.addEventListener('popstate', () => {
+      swapTo(location.href);
+    });
+
+    attach();
+  })();
   const listeners = new Set();
 
   const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } };
@@ -459,9 +544,22 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const r = await fetch(`api/get_sensor_data.php?barangay=${encodeURIComponent(currentBrgy)}`);
       const data = await r.json();
-      if (data.error || (data.status !== 'online' && data.status !== 'degraded')) return;
+      
+      // Check if device is offline/unavailable
+      if (data.error || data.status === 'offline') {
+        // Dispatch unavailable status to update UI
+        dispatchUpdate({ 
+          barangay: currentBrgy, 
+          latest: { wl: null, aqi: null, t: null, h: null, ts: data.timestamp },
+          status: 'offline',
+          message: data.message || 'Device unavailable'
+        });
+        return;
+      }
+      
+      if (data.status !== 'online' && data.status !== 'degraded') return;
 
-      const wl = computeWaterAlertLevel(Number(data.waterLevel)).level;
+      const wl = computeWaterAlertLevel(Number(data.waterPercent || data.waterLevel || 0)).level;
       const aqi = Number(data.airQuality);
       const t   = Number(data.temperature);
       const h   = Number(data.humidity);
@@ -474,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
       add(hist.water, wl); add(hist.air, aqi); add(hist.temp, t); add(hist.humid, h); addTime(hist.times, ts);
       saveHistoryFor(currentBrgy, hist);
 
-      dispatchUpdate({ barangay: currentBrgy, latest: { wl, aqi, t, h, ts }, history: hist });
+      dispatchUpdate({ barangay: currentBrgy, latest: { wl, aqi, t, h, ts }, history: hist, status: 'online' });
     } catch { /* ignore network errors */ }
   }
 
@@ -1539,9 +1637,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const lat = card.dataset.lat || card.getAttribute('data-lat');
             const lng = card.dataset.lng || card.getAttribute('data-lng');
             const loc = card.dataset.location || card.getAttribute('data-location');
+            console.log('Location button clicked. Lat:', lat, 'Lng:', lng, 'Location:', loc);
             if (lat && lng) {
-              try { window.__gomkOpenMapAt(Number(lat), Number(lng), loc || ''); } catch (e) { /* fallback */ }
+              const numLat = Number(lat);
+              const numLng = Number(lng);
+              console.log('Parsed coordinates - Lat:', numLat, 'Lng:', numLng);
+              if (!isNaN(numLat) && !isNaN(numLng)) {
+                try { 
+                  if (typeof window.__gomkOpenMapAt === 'function') {
+                    window.__gomkOpenMapAt(numLat, numLng, loc || 'Report Location');
+                  } else {
+                    console.error('__gomkOpenMapAt function not found');
+                  }
+                } catch (e) { 
+                  console.error('Error calling __gomkOpenMapAt:', e);
+                }
+              } else {
+                console.error('Invalid coordinates:', lat, lng);
+              }
             } else {
+              console.log('No coordinates found, opening map modal for search');
               // no coords: open the map modal to allow user search
               try { if (typeof openMapModal === 'function') openMapModal(); } catch (e) {}
             }
@@ -1736,6 +1851,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.warn('Failed to process report URL parameter:', e);
     }
+
+    // Expose openModal globally so it can be accessed from other functions
+    window.openModal = openModal;
   }
 
   // Scroll spy: keep the sidebar highlight in sync with the visible section.
@@ -2315,6 +2433,79 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
+
+  // Smooth pagination transitions for Reports on index.php
+  (function initReportsPager() {
+    const reportsSection = document.getElementById('reports');
+    let list = document.getElementById('reportsList');
+    let pager = document.getElementById('reportsPager');
+    if (!reportsSection || !list || !pager) return; // only on index page
+
+    const attach = () => {
+      if (!pager) return;
+      const links = Array.from(pager.querySelectorAll('a.pager-btn'));
+      links.forEach((a) => a.addEventListener('click', onClick));
+    };
+
+    const onClick = (e) => {
+      const a = e.currentTarget;
+      const disabled = a.getAttribute('aria-disabled') === 'true';
+      if (disabled) { e.preventDefault(); return; }
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // allow new-tab
+      e.preventDefault();
+      swapTo(a.href);
+    };
+
+    const swapTo = async (url) => {
+      try {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextList = doc.getElementById('reportsList');
+        const nextPager = doc.getElementById('reportsPager');
+        if (!nextList) { window.location.href = url; return; }
+
+        const doSwap = () => {
+          try { list.replaceWith(nextList); } catch (e) {}
+          if (pager && nextPager) { try { pager.replaceWith(nextPager); } catch (e) {} }
+          // Re-init references after swap
+          const newList = document.getElementById('reportsList');
+          const newPager = document.getElementById('reportsPager');
+          // Update live references for future swaps
+          if (newList) list = newList;
+          if (newPager) pager = newPager;
+          // Smooth scroll back to section
+          reportsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Focus first card for accessibility
+          newList?.querySelector('.report-card')?.focus?.();
+          // Re-attach listeners for the new pager
+          attach();
+        };
+
+        if (document.startViewTransition) {
+          document.startViewTransition(doSwap);
+        } else {
+          // Fallback: quick fade-out then swap
+          try { list.classList.add('is-out'); } catch (err) {}
+          setTimeout(doSwap, 120);
+        }
+
+        // push history so back/forward works
+        try { history.pushState({}, '', url); } catch (err) {}
+      } catch (err) {
+        // On error, just navigate normally
+        window.location.href = url;
+      }
+    };
+
+    // Handle back/forward
+    window.addEventListener('popstate', () => {
+      swapTo(location.href);
+    });
+
+    attach();
+  })();
 
   // Admin: wire status dropdowns to API endpoint
   (function initAdminStatusWiring() {
@@ -3012,19 +3203,23 @@ document.addEventListener('DOMContentLoaded', () => {
         photoPreview.src = '';
       }
 
+      function removePhoto() {
+        photoUploadArea.classList.remove('has-photo');
+        photoPreview.src = '';
+        try { photoInput.value = ''; } catch {}
+      }
+
       // Clear form button handler
       const clearFormBtn = document.getElementById('clearFormBtn');
       if (clearFormBtn) { clearFormBtn.addEventListener('click', clearForm); }
 
-      // Photo delete (X) button overlay
+      // Photo delete (X) button overlay - only removes photo, not all details
       const photoDelete = document.getElementById('photoDelete');
       if (photoDelete) {
         photoDelete.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          clearForm();
-          // Also clear the file input files
-          try { photoInput.value = ''; } catch {}
+          removePhoto();
           (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Photo removed', { type: 'info' }) : void 0;
         });
       }
@@ -3034,6 +3229,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (locationField) {
         locationField.addEventListener('click', () => {
           console.log('Location field clicked - map integration coming soon');
+        });
+      }
+
+      // Character counters for title and description
+      const titleInput = document.getElementById('title');
+      const descriptionTextarea = document.getElementById('description');
+      const titleCounter = document.getElementById('title-count');
+      const descriptionCounter = document.getElementById('description-count');
+
+      if (titleInput && titleCounter) {
+        titleInput.addEventListener('input', function() {
+          titleCounter.textContent = this.value.length;
+        });
+      }
+
+      if (descriptionTextarea && descriptionCounter) {
+        descriptionTextarea.addEventListener('input', function() {
+          descriptionCounter.textContent = this.value.length;
         });
       }
 
@@ -3059,6 +3272,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let map = null;
     let marker = null;
     let chosenPlace = null;
+    let isViewOnlyMode = false; // Flag to track if we're in view-only mode
 
     // Small helper to escape HTML when building popup content
     const escapeHtml = (s) => {
@@ -3103,6 +3317,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Bind an initially empty popup (we'll update content when selection happens)
   try { marker.bindPopup(''); } catch (e) {}
         marker.on('dragend', () => {
+          // If in view-only mode, don't allow dragging - reset marker position
+          if (isViewOnlyMode && chosenPlace) {
+            marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+            console.log('Drag prevented - view-only mode');
+            return;
+          }
+          
           const pos = marker.getLatLng();
           // clamp marker to Marikina bounds if dragged outside
           try {
@@ -3475,9 +3696,18 @@ document.addEventListener('DOMContentLoaded', () => {
         fake.dataset.submitted = (window.formatTo12hDisplay ? window.formatTo12hDisplay(reportObj.submitted_at || reportObj.created_at || '') : (reportObj.submitted_at || reportObj.created_at || ''));
         fake.dataset.image = reportObj.image || reportObj.image_path || '';
         // Call the global modal opener defined earlier in script
-        try { openModal && typeof openModal === 'function' ? openModal(fake) : null; } catch (e) { console.warn(e); }
+        try { 
+          if (window.openModal && typeof window.openModal === 'function') {
+            window.openModal(fake);
+          } else {
+            console.warn('openModal function not found on window object');
+          }
+        } catch (e) { console.warn('Error calling openModal:', e); }
       } catch (e) { console.warn('openReportInModal failed', e); }
     };
+
+    // Expose openReportInModal globally so it can be accessed from cluster click handlers
+    window.openReportInModal = openReportInModal;
 
   const openMapModal = () => {
       if (!mapModal) return;
@@ -3501,17 +3731,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Set marker and view after a brief delay to ensure map is ready
         // Only do this if we have a specific location to show
-        if (chosenPlace && marker) {
+        if (chosenPlace && marker && map) {
+          // First set the view immediately
+          try {
+            map.setView([chosenPlace.lat, chosenPlace.lon], 19, { animate: false });
+            marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+            console.log('openMapModal: Initial view and marker set to', chosenPlace.lat, chosenPlace.lon);
+          } catch (e) { console.error('Error setting initial view:', e); }
+          
+          // Then refine after a delay
           setTimeout(() => {
             try {
               // Position marker at the report location
               marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
               console.log('openMapModal: Marker set to', chosenPlace.lat, chosenPlace.lon);
               
-              // Zoom to street-level view
-              const z = 18; // Street-level zoom for detailed view of report location
-              map.setView([chosenPlace.lat, chosenPlace.lon], z, { animate: false });
+              // Zoom to very close street-level view
+              const z = 19; // Maximum zoom for detailed view of report location
+              map.setView([chosenPlace.lat, chosenPlace.lon], z, { animate: true, duration: 0.3 });
               console.log('openMapModal: Map view set to', chosenPlace.lat, chosenPlace.lon, 'zoom:', z);
+              
+              // Invalidate size again to ensure tiles load properly
+              map.invalidateSize(true);
               
               // Open the popup
               setTimeout(() => {
@@ -3520,9 +3761,9 @@ document.addEventListener('DOMContentLoaded', () => {
                   marker.bindPopup(popupText, { closeButton: true }).openPopup();
                   console.log('openMapModal: Popup opened with text:', popupText);
                 } catch (e) { console.error('Error opening popup:', e); }
-              }, 100);
+              }, 150);
             } catch (e) { console.error('Error setting map view:', e); }
-          }, 150);
+          }, 200);
         }
         // No search input to focus anymore
       }, 80);
@@ -3533,6 +3774,12 @@ document.addEventListener('DOMContentLoaded', () => {
       mapModal.removeAttribute('open');
       mapModal.style.display = 'none';
       document.body.classList.remove('modal-open');
+      // Clear chosenPlace when closing so it doesn't persist to next opening
+      // unless explicitly set by __gomkOpenMapAt
+      chosenPlace = null;
+      // Reset view-only mode
+      isViewOnlyMode = false;
+      console.log('closeMapModal: chosenPlace cleared, view-only mode disabled');
     };
 
   if (locationField) {
@@ -3853,33 +4100,43 @@ document.addEventListener('DOMContentLoaded', () => {
     // Expose helper to open the map modal focused on a lat/lng from other UI (e.g. report cards)
     window.__gomkOpenMapAt = (lat, lng, displayName) => {
       try {
-        if (!lat || !lng) {
-          console.warn('__gomkOpenMapAt called without valid coordinates', { lat, lng });
+        console.log('__gomkOpenMapAt called with:', { lat, lng, displayName });
+        
+        const numLat = Number(lat);
+        const numLng = Number(lng);
+        
+        if (!numLat || !numLng || isNaN(numLat) || isNaN(numLng)) {
+          console.warn('__gomkOpenMapAt called without valid coordinates', { lat, lng, numLat, numLng });
           return;
         }
         
         // Set the chosen place FIRST before initializing map
-        chosenPlace = { lat: Number(lat), lon: Number(lng), display_name: displayName || 'Report location' };
+        chosenPlace = { lat: numLat, lon: numLng, display_name: displayName || 'Report location' };
         console.log('__gomkOpenMapAt - chosenPlace set to:', chosenPlace);
+        
+        // Enable view-only mode (disable dragging for report viewing)
+        isViewOnlyMode = true;
         
         // Ensure map and marker are initialized
         ensureMap();
         
         console.log('__gomkOpenMapAt - marker exists:', !!marker);
         console.log('__gomkOpenMapAt - map exists:', !!map);
+        console.log('__gomkOpenMapAt - view-only mode enabled');
         
-        // Immediately position the marker at the chosen location
-        if (marker && chosenPlace) {
+        // Immediately position the marker and center map at the chosen location
+        if (marker && map && chosenPlace) {
           marker.setLatLng([chosenPlace.lat, chosenPlace.lon]);
+          map.setView([chosenPlace.lat, chosenPlace.lon], 19, { animate: false });
           const popupText = (chosenPlace.display_name || 'Report Location').toString();
           marker.bindPopup(popupText, { closeButton: true });
-          console.log('__gomkOpenMapAt - marker positioned at:', chosenPlace.lat, chosenPlace.lon);
+          console.log('__gomkOpenMapAt - marker and map centered at:', chosenPlace.lat, chosenPlace.lon);
         }
         
-        // Open the modal (which will also set view and open popup)
+        // Open the modal (which will also refine the view and open popup)
         openMapModal();
       } catch (e) { 
-        console.error('openMapAt failed', e); 
+        console.error('__gomkOpenMapAt failed:', e); 
       }
     };
 
@@ -4000,14 +4257,65 @@ document.addEventListener('DOMContentLoaded', () => {
           try { document.getElementById('passwordToggleBtn')?.remove(); } catch (e) {}
           try { document.getElementById('passwordConfirmToggleBtn')?.remove(); } catch (e) {}
           
-          // Change button to save
+          // Change button to X (cancel) initially
           editPasswordBtn.innerHTML = `
             <svg viewBox="0 0 24 24">
-              <path d="M20 6L9 17l-5-5"/>
+              <path d="M18 6 6 18"/>
+              <path d="m6 6 12 12"/>
             </svg>
           `;
-          editPasswordBtn.title = 'Save password';
+          editPasswordBtn.title = 'Cancel';
+          editPasswordBtn.dataset.mode = 'cancel';
+          
+          // Listen for input changes to switch to checkmark
+          const switchToSaveMode = () => {
+            const val = passwordField.value.trim();
+            if (val.length > 0) {
+              editPasswordBtn.innerHTML = `
+                <svg viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              `;
+              editPasswordBtn.title = 'Save password';
+              editPasswordBtn.dataset.mode = 'save';
+            } else {
+              editPasswordBtn.innerHTML = `
+                <svg viewBox="0 0 24 24">
+                  <path d="M18 6 6 18"/>
+                  <path d="m6 6 12 12"/>
+                </svg>
+              `;
+              editPasswordBtn.title = 'Cancel';
+              editPasswordBtn.dataset.mode = 'cancel';
+            }
+          };
+          passwordField.addEventListener('input', switchToSaveMode);
+          const confirmEl = document.getElementById('passwordConfirmField');
+          if (confirmEl) confirmEl.addEventListener('input', switchToSaveMode);
         } else {
+          // Check if button is in cancel mode
+          if (editPasswordBtn.dataset.mode === 'cancel') {
+            // Cancel - reset everything
+            passwordField.readOnly = true;
+            passwordField.type = 'password';
+            passwordField.value = '*************';
+            passwordField.placeholder = '';
+            const c = document.getElementById('passwordConfirmField');
+            const w = document.getElementById('passwordConfirmWrap');
+            if (w) { if (w._onResize) window.removeEventListener('resize', w._onResize); w.remove(); } else if (c) c.remove();
+            const show = document.getElementById('passwordShowAllRow');
+            if (show) show.remove();
+            editPasswordBtn.innerHTML = `
+              <svg viewBox="0 0 24 24">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            `;
+            editPasswordBtn.title = 'Edit password';
+            delete editPasswordBtn.dataset.mode;
+            return;
+          }
+          
           // Save changes
           const newPassword = passwordField.value.trim();
           const confirmEl = document.getElementById('passwordConfirmField');
@@ -4056,6 +4364,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   </svg>
                 `;
                 editPasswordBtn.title = 'Edit password';
+                delete editPasswordBtn.dataset.mode;
                 (window.GOMK && window.GOMK.showToast) ? window.GOMK.showToast('Password updated successfully!', { type: 'success' }) : alert('Password updated successfully!');
               })
               .catch((err) => {
@@ -4343,5 +4652,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })();
 
+    // Character counter for announcement form
+    const announcementTitleInput = document.querySelector('input[name="announcement_title"]');
+    const announcementBodyTextarea = document.querySelector('textarea[name="announcement_body"]');
+    const headlineCounter = document.getElementById('headline-count');
+    const messageCounter = document.getElementById('message-count');
+
+    if (announcementTitleInput && headlineCounter) {
+      announcementTitleInput.addEventListener('input', function() {
+        headlineCounter.textContent = this.value.length;
+      });
+    }
+
+    if (announcementBodyTextarea && messageCounter) {
+      announcementBodyTextarea.addEventListener('input', function() {
+        messageCounter.textContent = this.value.length;
+      });
+    }
     
   });

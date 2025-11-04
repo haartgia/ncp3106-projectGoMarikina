@@ -1,6 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $userRole = $_SESSION['role'] ?? 'user';
 
@@ -21,8 +20,12 @@ $barangays = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard · GO! MARIKINA</title>
-    <?php $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/'); ?>
-    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= time() ?>">
+    <?php 
+        $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+        $cssVersion = @filemtime(__DIR__ . '/assets/css/style.css') ?: time();
+        $jsVersion = @filemtime(__DIR__ . '/assets/js/script.js') ?: time();
+    ?>
+    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= $cssVersion ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         /* UI fixes and consistency */
@@ -95,7 +98,10 @@ $barangays = [
 
         .city-metric-sparkline { cursor: pointer; } /* indicate it's clickable */
 
-        /* Modal layout fixes */
+    /* Fallback: ensure metric grid uses CSS Grid even if external CSS is delayed */
+    .city-metric-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:24px; }
+
+    /* Modal layout fixes */
         .graph-modal-dialog{
             width:clamp(900px, 95vw, 1100px);
             height:clamp(560px, 82vh, 760px);
@@ -180,6 +186,28 @@ $barangays = [
     .graph-tooltip .ttl{ font-weight:700; }
     .graph-tooltip .val{ font-variant-numeric:tabular-nums; }
 
+        /* Inline info tooltip for environment cards */
+        .info-tip-wrap{ position: relative; display:inline-flex; align-items:center; }
+        .info-tip{
+            appearance:none; border:1px solid rgba(15,23,42,.18); background:rgba(2,6,23,.04);
+            color:#475569; width:18px; height:18px; border-radius:999px; display:inline-flex;
+            align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:help;
+        }
+        .info-tip:focus{ outline:2px solid #0ea5e9; outline-offset:2px; }
+        .info-tip-bubble{
+            position:absolute; top:130%; left:0; z-index:100; display:none; min-width:220px; max-width:280px;
+            padding:10px 12px; border-radius:10px; background:#ffffff; color:#0f172a;
+            border:1px solid rgba(15,23,42,.08); box-shadow:0 10px 25px rgba(2,6,23,.15); font-size:12px;
+        }
+        .info-tip-bubble:after{
+            content:""; position:absolute; top:-6px; left:10px; width:10px; height:10px; background:#fff;
+            border-left:1px solid rgba(15,23,42,.08); border-top:1px solid rgba(15,23,42,.08); transform:rotate(45deg);
+        }
+    /* Show inline bubble only when explicitly toggled (we use a fixed overlay by default) */
+    .info-tip-wrap[data-open="true"] .info-tip-bubble{ display:block; }
+        .info-tip-wrap .status-icon{ cursor: help; }
+        @media (max-width: 520px){ .info-tip-bubble{ left:auto; right:0; } .info-tip-bubble:after{ left:auto; right:10px; } }
+
         /* Remove page scrolling on desktop (hide scrollbar) */
         @media (min-width: 1024px){
             html, body { overflow: hidden; }
@@ -257,13 +285,24 @@ $barangays = [
                         <h2>Environment snapshot</h2>
                         <p class="admin-section-subtitle">Water, air, temperature, and humidity at a glance for the selected barangay.</p>
                     </div>
-                    <span class="city-selected-pill">Selected barangay: <strong id="selectedBarangayChip">None</strong></span>
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <span class="city-selected-pill">Selected barangay: <strong id="selectedBarangayChip">None</strong></span>
+                        <span id="deviceStatusPill" class="city-device-pill device-unknown">
+                            <span class="device-dot" aria-hidden="true"></span>
+                            <span id="deviceStatusText">Device: Unknown</span>
+                        </span>
+                    </div>
                 </div>
 
                 <div class="city-metric-grid">
                     <article class="city-metric-card city-metric-card--water">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Water level <span id="waterStatusIcon" class="status-icon status-gray" title="Water level icon"><i class="bi bi-moisture" aria-hidden="true"></i></span></p>
+                            <p class="city-metric-title">Water level
+                                <span class="info-tip-wrap">
+                                    <span id="waterStatusIcon" class="status-icon status-gray" aria-describedby="tip-water" tabindex="0"><i class="bi bi-moisture" aria-hidden="true"></i></span>
+                                    <span class="info-tip-bubble" id="tip-water" role="tooltip">River gauges by alert level: L1 Gutter‑deep, L2 Knee‑deep, L3 Waist‑deep. Values reflect the latest barangay reading.</span>
+                                </span>
+                            </p>
                             <p class="city-metric-value">
                                 <span id="waterLevelVal" data-city-metric-value data-empty="true">—</span>
                                 <span class="city-metric-unit">LEVEL</span>
@@ -282,7 +321,12 @@ $barangays = [
 
                     <article class="city-metric-card city-metric-card--air">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Air quality <span id="airStatusIcon" class="status-icon status-gray" title="Air quality icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h8M6 12h12M10 16h8"/></svg></span></p>
+                            <p class="city-metric-title">Air quality
+                                <span class="info-tip-wrap">
+                                    <span id="airStatusIcon" class="status-icon status-gray" aria-describedby="tip-air" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h8M6 12h12M10 16h8"/></svg></span>
+                                    <span class="info-tip-bubble" id="tip-air" role="tooltip">Air Quality Index (AQI) — lower is better. 0–50 Excellent, 51–100 Good, 101–150 Moderate, 151+ Poor.</span>
+                                </span>
+                            </p>
                             <p class="city-metric-value">
                                 <span id="airQualityVal" data-city-metric-value data-empty="true">—</span>
                                 <span class="city-metric-unit">AQI</span>
@@ -299,7 +343,12 @@ $barangays = [
 
                     <article class="city-metric-card city-metric-card--temperature">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Temperature <span id="tempStatusIcon" class="status-icon status-gray" title="Temperature icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v7.17a4 4 0 1 1-4 0V4a2 2 0 0 1 2-2z"/></svg></span></p>
+                            <p class="city-metric-title">Temperature
+                                <span class="info-tip-wrap">
+                                    <span id="tempStatusIcon" class="status-icon status-gray" aria-describedby="tip-temp" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v7.17a4 4 0 1 1-4 0V4a2 2 0 0 1 2-2z"/></svg></span>
+                                    <span class="info-tip-bubble" id="tip-temp" role="tooltip">Ambient air temperature measured near the selected barangay station, shown in °C.</span>
+                                </span>
+                            </p>
                             <p class="city-metric-value">
                                 <span id="temperatureVal" data-city-metric-value data-empty="true">—</span>
                                 <span class="city-metric-unit">°C</span>
@@ -316,7 +365,12 @@ $barangays = [
 
                     <article class="city-metric-card city-metric-card--humidity">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Humidity <span id="humidStatusIcon" class="status-icon status-gray" title="Humidity icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.5 5.5 7 8 7 12a7 7 0 1 1-14 0c0-4 3.5-6.5 7-12z"/></svg></span></p>
+                            <p class="city-metric-title">Humidity
+                                <span class="info-tip-wrap">
+                                    <span id="humidStatusIcon" class="status-icon status-gray" aria-describedby="tip-humid" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.5 5.5 7 8 7 12a7 7 0 1 1-14 0c0-4 3.5-6.5 7-12z"/></svg></span>
+                                    <span class="info-tip-bubble" id="tip-humid" role="tooltip">Relative humidity indicates how much moisture is in the air, as a percentage.</span>
+                                </span>
+                            </p>
                             <p class="city-metric-value">
                                 <span id="humidityVal" data-city-metric-value data-empty="true">—</span>
                                 <span class="city-metric-unit">%</span>
@@ -346,7 +400,7 @@ $barangays = [
                 <div class="city-metric-grid">
                     <article class="city-metric-card city-metric-card--water">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Current level <span class="status-icon status-gray" title="Current level icon"><i class="bi bi-moisture" aria-hidden="true"></i></span></p>
+                            <p class="city-metric-title">Current level <span class="status-icon status-gray"><i class="bi bi-moisture" aria-hidden="true"></i></span></p>
                             <p class="city-metric-value"><span id="riverCurrent" data-city-metric-value data-empty="true">—</span><span class="city-metric-unit">EL.m</span></p>
                         </div>
                         <p class="city-metric-description">Latest gauge reading at the selected station.</p>
@@ -358,7 +412,7 @@ $barangays = [
 
                     <article class="city-metric-card city-metric-card--temperature">
                         <div class="city-metric-header">
-                            <p class="city-metric-title">Air temperature <span class="status-icon status-gray" title="Temperature icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v7.17a4 4 0 1 1-4 0V4a2 2 0 0 1 2-2z"/></svg></span></p>
+                            <p class="city-metric-title">Air temperature <span class="status-icon status-gray"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a2 2 0 0 1 2 2v7.17a4 4 0 1 1-4 0V4a2 2 0 0 1 2-2z"/></svg></span></p>
                             <p class="city-metric-value"><span id="riverTempVal" data-city-metric-value data-empty="true">—</span><span class="city-metric-unit">°C</span></p>
                         </div>
                         <p class="city-metric-description">Nearest ambient temperature reading.</p>
@@ -407,10 +461,12 @@ $barangays = [
     </div>
     <div id="graphTooltip" class="graph-tooltip" role="status" aria-live="polite"></div>
 
-    <script src="<?= $BASE ?>/assets/js/script.js?v=<?= time() ?>" defer></script>
+    <script src="<?= $BASE ?>/assets/js/script.js?v=<?= $jsVersion ?>" defer></script>
     <script>
     (() => {
       'use strict';
+            // Defensive: reset any leftover UI state from previous pages/restores
+            try { document.body.classList.remove('nav-open', 'modal-open'); } catch(e) {}
 
       const BASE = '<?= $BASE ?>';
       const qs = id => document.getElementById(id);
@@ -439,6 +495,24 @@ $barangays = [
         temp:  qs('tempChart'),
         humid: qs('humidChart')
       };
+
+            // Device status pill helpers
+            const devicePill = qs('deviceStatusPill');
+            const deviceText = qs('deviceStatusText');
+            function setDeviceStatus(status){
+                if (!devicePill || !deviceText) return;
+                devicePill.classList.remove('device-online','device-offline','device-unknown');
+                if (status === 'online'){
+                    devicePill.classList.add('device-online');
+                    deviceText.textContent = 'Device: Online';
+                } else if (status === 'offline'){
+                    devicePill.classList.add('device-offline');
+                    deviceText.textContent = 'Device: Offline';
+                } else {
+                    devicePill.classList.add('device-unknown');
+                    deviceText.textContent = 'Device: Unknown';
+                }
+            }
 
             // River time-series (shallow buffer so modal can render)
             const riverHistory = { current: [], temp: [], times: [] };
@@ -947,7 +1021,7 @@ $barangays = [
       // Persistence
     const loadHistoryFor = b => (window.GoMKData?.loadHistoryFor(b)) || { water:[], air:[], temp:[], humid:[], times:[] };
 
-      function adoptHistory(hist){
+      function adoptHistory(hist, isOffline){
         history.water = (hist.water||[]).slice(-MAX_POINTS);
         history.air   = (hist.air||[]).slice(-MAX_POINTS);
         history.temp  = (hist.temp||[]).slice(-MAX_POINTS);
@@ -957,10 +1031,20 @@ $barangays = [
         const last = arr => { for (let i=arr.length-1;i>=0;i--) if (arr[i]!=null) return arr[i]; return null; };
         const ts = history.times.at(-1) || null;
         const wl = last(history.water), aq = last(history.air), t = last(history.temp), h = last(history.humid);
-    if (wl!=null) { qs('waterLevelVal').textContent = wl; updateWaterDot(wl); }
-    if (aq!=null) { qs('airQualityVal').textContent = aq; updateAQIBadge(aq); updateAirDot(aq); }
-    if (t !=null) { qs('temperatureVal').textContent = Number(t).toFixed(1); updateTempDot(t); }
-    if (h !=null) { qs('humidityVal').textContent = Number(h).toFixed(1); updateHumidDot(h); }
+        
+    // If offline, show dash for all metrics
+    if (isOffline) {
+        qs('waterLevelVal').textContent = '—';
+        qs('airQualityVal').textContent = '—';
+        qs('temperatureVal').textContent = '—';
+        qs('humidityVal').textContent = '—';
+        setDeviceStatus('offline');
+    } else {
+        if (wl!=null) { qs('waterLevelVal').textContent = wl; updateWaterDot(wl); }
+        if (aq!=null) { qs('airQualityVal').textContent = aq; updateAQIBadge(aq); updateAirDot(aq); }
+        if (t !=null) { qs('temperatureVal').textContent = Number(t).toFixed(1); updateTempDot(t); }
+        if (h !=null) { qs('humidityVal').textContent = Number(h).toFixed(1); updateHumidDot(h); }
+    }
         setTime('waterTime', ts); setTime('airTime', ts); setTime('tempTime', ts); setTime('humidTime', ts);
 
                 // For compact card sparklines, show 30‑minute averaged values to avoid cramped visuals
@@ -986,14 +1070,48 @@ $barangays = [
             function bindBackgroundUpdates(){
                 window.addEventListener('gomk:data', (ev) => {
                     const d = ev.detail; if (!d || d.barangay !== currentBrgy) return;
+                    
+                    // Check if device is offline
+                    if (d.status === 'offline') {
+                        const waterEl = qs('waterLevelVal');
+                        const airEl = qs('airQualityVal');
+                        const tempEl = qs('temperatureVal');
+                        const humidEl = qs('humidityVal');
+                        
+                        waterEl.textContent = '—';
+                        airEl.textContent = '—';
+                        tempEl.textContent = '—';
+                        humidEl.textContent = '—';
+                        
+                        // Add class for styling
+                        waterEl.classList.add('unavailable-text');
+                        airEl.classList.add('unavailable-text');
+                        tempEl.classList.add('unavailable-text');
+                        humidEl.classList.add('unavailable-text');
+                        
+                        setTime('waterTime', d.latest?.ts || null);
+                        setTime('airTime', d.latest?.ts || null);
+                        setTime('tempTime', d.latest?.ts || null);
+                        setTime('humidTime', d.latest?.ts || null);
+                        setDeviceStatus('offline');
+                        return;
+                    }
+                    
+                    // Remove unavailable class when online
+                    qs('waterLevelVal').classList.remove('unavailable-text');
+                    qs('airQualityVal').classList.remove('unavailable-text');
+                    qs('temperatureVal').classList.remove('unavailable-text');
+                    qs('humidityVal').classList.remove('unavailable-text');
+                    
                     const { wl, aqi, t, h, ts } = d.latest || {};
                       if (wl!=null) { qs('waterLevelVal').textContent = wl; updateWaterDot(wl); }
                       if (aqi!=null) { qs('airQualityVal').textContent = isFinite(aqi) ? aqi : '—'; updateAQIBadge(aqi); updateAirDot(aqi); }
                       if (t!=null) { qs('temperatureVal').textContent = isFinite(t) ? t.toFixed(1) : '—'; updateTempDot(t); }
                       if (h!=null) { qs('humidityVal').textContent = isFinite(h) ? h.toFixed(1) : '—'; updateHumidDot(h); }
                     setTime('waterTime', ts); setTime('airTime', ts); setTime('tempTime', ts); setTime('humidTime', ts);
+                    setDeviceStatus('online');
 
-                    adoptHistory(d.history || loadHistoryFor(currentBrgy));
+                    adoptHistory(d.history || loadHistoryFor(currentBrgy), false);
                 });
             }
 
@@ -1005,6 +1123,7 @@ $barangays = [
                 if (!currentBrgy) return;
                 adoptHistory(loadHistoryFor(currentBrgy));
                 window.GoMKData?.setBarangay(currentBrgy);
+                setDeviceStatus('unknown');
             });
 
             // Initialize selection from saved value if present
@@ -1015,6 +1134,7 @@ $barangays = [
                 updateSelection(currentBrgy);
                 adoptHistory(loadHistoryFor(currentBrgy));
                 window.GoMKData?.setBarangay(currentBrgy);
+                setDeviceStatus('unknown');
             }
 
             bindBackgroundUpdates();
@@ -1027,6 +1147,58 @@ $barangays = [
                         ];
                         window.GoMKData?.setTrackedBarangays(ALL);
                     } catch {}
+
+            // Lightweight tooltip toggles for info icons on metric cards
+            try {
+                const wraps = document.querySelectorAll('.info-tip-wrap');
+                const closeAll = () => {
+                    document.querySelectorAll('.info-tip-wrap[data-open="true"]').forEach(w => {
+                        w.removeAttribute('data-open');
+                        const b = w.querySelector('.info-tip');
+                        if (b) b.removeAttribute('aria-expanded');
+                    });
+                };
+                // Use the global fixed graphTooltip as the overlay for info tips
+                const overlay = document.getElementById('graphTooltip');
+                const OFF = 12;
+                const place = (x, y) => {
+                    if (!overlay) return;
+                    const r = overlay.getBoundingClientRect();
+                    let tx = x + OFF, ty = y + OFF;
+                    const vw = window.innerWidth, vh = window.innerHeight;
+                    if (tx + r.width > vw - 8) tx = x - r.width - OFF;
+                    if (ty + r.height > vh - 8) ty = y - r.height - OFF;
+                    overlay.style.left = Math.max(8, tx) + 'px';
+                    overlay.style.top  = Math.max(8, ty) + 'px';
+                };
+                const showOverlay = (text, nearEl) => {
+                    if (!overlay) return;
+                    overlay.innerHTML = `<div class="ttl">${text}</div>`;
+                    overlay.style.display = 'block';
+                    const rect = nearEl.getBoundingClientRect();
+                    place(rect.right, rect.top);
+                };
+                const hideOverlay = () => { if (overlay) overlay.style.display = 'none'; };
+
+                wraps.forEach(wrap => {
+                    const icon = wrap.querySelector('.status-icon');
+                    const bubble = wrap.querySelector('.info-tip-bubble');
+                    if (!icon || !bubble) return;
+                    const text = bubble.textContent || '';
+
+                    icon.addEventListener('mouseenter', () => showOverlay(text, icon));
+                    icon.addEventListener('mouseleave', hideOverlay);
+                    icon.addEventListener('focus', () => showOverlay(text, icon));
+                    icon.addEventListener('blur', hideOverlay);
+                    icon.addEventListener('click', (e) => {
+                        // Support touch: toggle on tap
+                        e.stopPropagation();
+                        if (overlay && overlay.style.display === 'block') hideOverlay(); else showOverlay(text, icon);
+                    });
+                });
+                document.addEventListener('click', hideOverlay);
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideOverlay(); });
+            } catch {}
     })();
     </script>
 </body>

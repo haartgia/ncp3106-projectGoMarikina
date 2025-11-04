@@ -1,11 +1,22 @@
 <?php
-// List reports (optionally filter by status, category, mine=true)
-// Response: JSON { success: bool, data: [...] }
+/**
+ * Reports: List
+ *
+ * Endpoint: GET /api/reports_list.php
+ * Purpose: Return recent reports, optionally filtered by status/category or limited to current user (mine).
+ * Auth: Optional (required when mine=1)
+ *
+ * Query params:
+ * - status (string, optional)
+ * - category (string, optional)
+ * - mine (bool|1|true, optional)
+ *
+ * Response:
+ * - 200: { success: true, data: [ { id, title, category, status, reporter, location, submitted_at, summary, image, tags } ] }
+ * - 500: { success: false, message }
+ */
 
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
 $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';

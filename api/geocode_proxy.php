@@ -1,11 +1,17 @@
 <?php
-// Simple server-side proxy for Nominatim geocoding with filesystem cache.
-// Purpose: avoid client-side rate limiting, add caching, and centralize usage.
+/**
+ * Geocode Proxy (Nominatim + optional LocationIQ fallback)
+ *
+ * Endpoint: GET /api/geocode_proxy.php?action=search|reverse
+ * Purpose: Server-side geocoding proxy with simple filesystem caching to avoid client rate limits.
+ * Auth: Not required
+ *
+ * Notes:
+ * - Does not include DB bootstrap on purpose (no DB dependency).
+ * - Respects Nominatim usage policy with a proper User-Agent.
+ */
 
-// NOTE: do NOT require the global DB bootstrap here. Including
-// `config/db.php` attempts a DB connection and may die() if MySQL
-// is unavailable which will make the proxy unusable. This proxy
-// does not need the DB.
+// IMPORTANT: Do NOT include config/db.php here; this proxy must remain DB-free.
 
 header('Content-Type: application/json; charset=utf-8');
 

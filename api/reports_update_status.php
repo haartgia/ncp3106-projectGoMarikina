@@ -1,9 +1,20 @@
 <?php
-// Update report status (admin only)
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+/**
+ * Reports: Update Status (admin)
+ *
+ * Endpoint: POST /api/reports_update_status.php
+ * Purpose: Update a report's status and notify the owner.
+ * Auth: Requires admin session
+ *
+ * Form params:
+ * - report_id (int, required)
+ * - status (enum: unresolved|in_progress|solved)
+ *
+ * Response:
+ * - 200: { success: true, message }
+ * - 4xx/5xx: { success: false, message }
+ */
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

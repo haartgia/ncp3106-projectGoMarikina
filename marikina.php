@@ -1,6 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -8,8 +7,12 @@ require_once __DIR__ . '/includes/helpers.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Marikina River · GO! MARIKINA</title>
-    <?php $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/'); ?>
-    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= time() ?>">
+    <?php 
+        $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+        $cssVersion = @filemtime(__DIR__ . '/assets/css/style.css') ?: time();
+        $jsVersion = @filemtime(__DIR__ . '/assets/js/script.js') ?: time();
+    ?>
+    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= $cssVersion ?>">
 </head>
 <body id="top">
     <div class="dashboard-layout">

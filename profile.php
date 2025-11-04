@@ -1,7 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $myReports = [];
 $reportCount = 0;
@@ -21,7 +19,7 @@ if (is_logged_in()) {
 
     // Load user's reports
     try {
-        $stmt2 = $conn->prepare("SELECT id, title, category, description, location, image_path, status, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 200");
+        $stmt2 = $conn->prepare("SELECT id, title, category, description, location, latitude, longitude, image_path, status, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 200");
         $stmt2->bind_param("i", $user_id);
         $stmt2->execute();
         $res2 = $stmt2->get_result();
@@ -158,7 +156,9 @@ if (is_logged_in()) {
                                     $statusLabel = status_label($rawStatus);
                                     $statusModifier = status_chip_modifier($rawStatus);
 
-                                    $titleDisplay = htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8');
+                                    $titleRaw = (string)($report['title'] ?? 'Citizen report');
+                                    $titleDisplay = htmlspecialchars($titleRaw, ENT_QUOTES, 'UTF-8');
+                                    $titleShortDisplay = htmlspecialchars(function_exists('truncate_text') ? truncate_text($titleRaw, 30, '...') : (strlen($titleRaw) > 25 ? substr($titleRaw, 0, 25) . '...' : $titleRaw), ENT_QUOTES, 'UTF-8');
                                     $locationDisplay = htmlspecialchars($report['location'] ?? '', ENT_QUOTES, 'UTF-8');
                                     $rawCategory = (string)($report['category'] ?? '');
                                     $categoryDisplay = htmlspecialchars(category_label($rawCategory), ENT_QUOTES, 'UTF-8');
@@ -220,7 +220,7 @@ if (is_logged_in()) {
                                             </div>
                                             <div>
                                                 <div class="report-title-row">
-                                                    <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleDisplay; ?></h3>
+                                                    <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleShortDisplay; ?></h3>
                                                     <span class="report-meta">Submitted <?php echo $submittedAttr; ?></span>
                                                 </div>
                                                 <p class="report-meta-row">

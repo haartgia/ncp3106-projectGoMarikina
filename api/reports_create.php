@@ -1,11 +1,26 @@
 <?php
-// Create a new report with optional image upload
-// Response: JSON { success: bool, message: string, report?: {...} }
+/**
+ * Reports: Create
+ *
+ * Endpoint: POST /api/reports_create.php
+ * Purpose: Create a new report with optional photo and optional coordinates.
+ * Auth: Optional (uses current session if present)
+ *
+ * Request (multipart/form-data):
+ * - title (string, required)
+ * - category (string, required)
+ * - description (string, required)
+ * - location (string, required)
+ * - location_lat (float, optional)
+ * - location_lng (float, optional)
+ * - photo (file, optional; jpg/png/webp, up to 5MB)
+ *
+ * Response:
+ * - 200: { success: true, message: string, report: {...} }
+ * - 4xx/5xx: { success: false, message: string }
+ */
 
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -13,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// Basic validation helper
+// Input helpers
 function field($key) { return isset($_POST[$key]) ? trim((string)$_POST[$key]) : ''; }
 
 $title = field('title');
@@ -45,7 +60,7 @@ if (isset($_POST['location_lng']) && $_POST['location_lng'] !== '') {
     }
 }
 
-// Validate image (optional)
+// Optional photo upload
 $imagePath = null;
 $uploadDir = __DIR__ . '/../uploads/reports';
 $publicBase = 'uploads/reports';
@@ -54,7 +69,7 @@ if (!is_dir($uploadDir)) {
     @mkdir($uploadDir, 0775, true);
 }
 
-// Handle optional photo upload: only validate/process if user actually attempted an upload
+// Only validate/process if user actually attempted an upload
 if (isset($_FILES['photo'])) {
     $file = $_FILES['photo'];
     // If no file was provided, ignore (optional)
@@ -87,7 +102,7 @@ if (isset($_FILES['photo'])) {
                 }
             }
         } else {
-            // If tmp_name not present but error not NO_FILE, report upload failed
+            // If tmp_name not present but error not NO_FILE, treat as upload failure
             if (isset($file['error']) && $file['error'] !== UPLOAD_ERR_NO_FILE) {
                 $errors[] = 'Photo upload failed';
             }
@@ -101,9 +116,7 @@ if ($errors) {
     exit;
 }
 
-// Photo is optional. If no image was uploaded we'll continue and store NULL in the
-// image_path column. The client-side now also treats photo as optional.
-// (Previously this endpoint enforced a photo and returned 422.)
+// Photo is optional. If no image was uploaded we'll store NULL in image_path.
 
 $user = current_user();
 $userId = null;
@@ -120,13 +133,12 @@ if ($user) {
     $reporterEmail = $user['email'] ?? null;
 }
 
-// Insert into DB
+// Insert into DB (supports schemas with/without latitude/longitude)
 try {
     $hasUser = ($userId !== null);
     $hasImage = ($imagePath !== null);
 
-    // Detect if latitude/longitude columns exist to avoid fatal errors on
-    // instances where the migration hasn't been applied yet.
+    // Detect presence of latitude/longitude columns to avoid fatal errors
     $hasLatLng = false;
     try {
         $chkLat = $conn->query("SHOW COLUMNS FROM reports LIKE 'latitude'");
@@ -135,11 +147,11 @@ try {
         if ($chkLat) { $chkLat->close(); }
         if ($chkLng) { $chkLng->close(); }
     } catch (Throwable $e) {
-        // If SHOW COLUMNS fails, assume columns are missing and proceed without them
+    // If SHOW COLUMNS fails, assume columns are missing and continue without them
         $hasLatLng = false;
     }
 
-    // Build and run the appropriate INSERT, guarding prepare() results
+    // Build and run the appropriate INSERT
     if ($hasLatLng) {
         if ($hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
@@ -159,7 +171,7 @@ try {
             $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latitude, $longitude);
         }
     } else {
-        // Fallback for older schemas without latitude/longitude columns
+    // Fallback path for schemas without latitude/longitude columns
         if ($hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
@@ -187,7 +199,7 @@ try {
     $newId = $stmt->insert_id;
     $stmt->close();
 
-    // Create a response-friendly structure
+    // Response-friendly structure
     $now = date('Y-m-d H:i:s');
     $report = [
         'id' => (int)$newId,
@@ -204,7 +216,7 @@ try {
         'tags' => [],
     ];
 
-    // Backward-compat: also push into session so existing UI shows it immediately
+    // Backward-compat: push into session so existing UI shows it immediately
     if (!isset($_SESSION['reports']) || !is_array($_SESSION['reports'])) {
         $_SESSION['reports'] = [];
     }
@@ -212,7 +224,7 @@ try {
 
     echo json_encode(['success' => true, 'message' => 'Report created successfully', 'report' => $report]);
   
-        // Create a notification for the user (if logged in)
+    // Create a notification for the user (if logged in)
         try {
             if ($userId) {
                 $check = $conn->query("SHOW TABLES LIKE 'notifications'");

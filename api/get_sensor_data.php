@@ -1,8 +1,22 @@
 <?php
+/**
+ * Sensors: Current Reading
+ *
+ * Endpoint: GET /api/get_sensor_data.php?barangay=NAME[&ip=OVERRIDE][&debug=1]
+ * Purpose: Return the latest sensor reading for a barangay. Uses real device for
+ *          Malanday (with optional IP override), otherwise returns deterministic
+ *          dummy data for demo/testing. Persists samples periodically.
+ * Auth: Not required
+ *
+ * Response:
+ * - 200: { success: true, data: {...} } or { status: 'unavailable' } for offline
+ */
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
 date_default_timezone_set('Asia/Manila'); // ensure PHP timestamps are PH time
+
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 $default_ip = '192.168.254.118'; // ESP32 for Malanday
 
@@ -24,6 +38,78 @@ if ($brgyKey === 'malanday') {
     $device_ip = $esp32_ip_override ?: $default_ip;
 }
 
+// Helper: Save sensor data to database (only if 10 minutes have passed)
+function saveSensorData($data) {
+    try {
+        $db = get_db_connection();
+        
+        $barangay = $data['barangay'] ?? '';
+        
+        // Check if we should save (only every 10 minutes)
+        // Get the last saved timestamp for this barangay
+        $check_stmt = $db->prepare("
+            SELECT reading_timestamp 
+            FROM sensor_data 
+            WHERE barangay = ? 
+            ORDER BY reading_timestamp DESC 
+            LIMIT 1
+        ");
+        $check_stmt->bind_param('s', $barangay);
+        $check_stmt->execute();
+        $result = $check_stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $last_timestamp = strtotime($row['reading_timestamp']);
+            $current_time = time();
+            
+            // Only save if 10 minutes (600 seconds) have passed
+            if (($current_time - $last_timestamp) < 600) {
+                $check_stmt->close();
+                $db->close();
+                return false; // Skip saving, not enough time has passed
+            }
+        }
+        $check_stmt->close();
+        
+        // Proceed to save data
+        $device_ip = $data['device_ip'] ?? null;
+        $temperature = $data['temperature'] ?? null;
+        $humidity = $data['humidity'] ?? null;
+        $water_percent = $data['waterPercent'] ?? $data['waterLevel'] ?? 0;
+        $flood_level = $data['floodLevel'] ?? 'No Flood';
+        $air_quality = $data['airQuality'] ?? null;
+        $gas_analog = $data['gasAnalog'] ?? null;
+        $gas_voltage = $data['gasVoltage'] ?? null;
+        $status = $data['status'] ?? 'online';
+        $source = $data['source'] ?? 'esp32';
+        $reading_timestamp = $data['timestamp'] ?? date('Y-m-d H:i:s');
+        
+        $stmt = $db->prepare("
+            INSERT INTO sensor_data 
+            (barangay, device_ip, temperature, humidity, water_percent, flood_level, 
+             air_quality, gas_analog, gas_voltage, status, source, reading_timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        
+        $stmt->bind_param(
+            'ssddisisdsss',
+            $barangay, $device_ip, $temperature, $humidity, $water_percent, 
+            $flood_level, $air_quality, $gas_analog, $gas_voltage, $status, 
+            $source, $reading_timestamp
+        );
+        
+        $stmt->execute();
+        $stmt->close();
+        $db->close();
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("Failed to save sensor data: " . $e->getMessage());
+        return false;
+    }
+}
+
 // Helper: deterministic pseudo-random (changes every 30s) for dummy data
 function pseudo($key) {
     $n = sprintf('%u', crc32($key)); // unsigned
@@ -40,10 +126,21 @@ function dummyData($barangay) {
     $gasV = round(($gasA / 4095) * 3.3, 2);
     $aqi  = (int) round(50 + pseudo($base.'a') * 150);  // 50–200
 
+    // Determine flood level based on water percentage
+    $floodLevel = 'No Flood';
+    if ($wl >= 100) {
+        $floodLevel = 'Level 3 (Waist Deep)';
+    } elseif ($wl >= 66) {
+        $floodLevel = 'Level 2 (Knee Deep)';
+    } elseif ($wl >= 33) {
+        $floodLevel = 'Level 1 (Gutter Deep)';
+    }
+
     return [
         'temperature' => $temp,
         'humidity'    => $hum,
-        'waterLevel'  => $wl,
+        'waterPercent' => $wl,  // Changed from waterLevel to waterPercent
+        'floodLevel'  => $floodLevel,  // Added flood level
         'airQuality'  => $aqi,
         'gasAnalog'   => $gasA,
         'gasVoltage'  => $gasV,
@@ -122,6 +219,9 @@ try {
         $data['source']    = 'esp32';
         $data['device_ip'] = $device_ip;
 
+        // Save to database (non-blocking)
+        saveSensorData($data);
+
         if ($debug) {
             echo json_encode([
                 'proxy_status' => 'ok',
@@ -135,40 +235,61 @@ try {
         return;
     }
 
-    // all attempts failed for device -> fall back to dummy to keep UI alive
-    $fallback = dummyData($barangay);
-    $fallback['barangay']  = $barangay;
-    $fallback['timestamp'] = date('Y-m-d H:i:s');
-    $fallback['status']    = 'degraded'; // indicate fallback
-    $fallback['source']    = 'dummy-fallback';
-    $fallback['device_ip'] = $device_ip;
+    // all attempts failed for device -> return unavailable status (no dummy data for Malanday)
+    $unavailable = [
+        'barangay'  => $barangay,
+        'timestamp' => date('Y-m-d H:i:s'),
+        'status'    => 'offline',
+        'source'    => 'esp32',
+        'device_ip' => $device_ip,
+        'error'     => true,
+        'message'   => 'ESP32 device unavailable',
+        'temperature' => null,
+        'humidity' => null,
+        'waterPercent' => null,
+        'floodLevel' => 'Unknown',
+        'airQuality' => null,
+        'gasAnalog' => null,
+        'gasVoltage' => null
+    ];
 
     if ($debug) {
         echo json_encode([
             'proxy_status' => 'error',
             'message'      => $lastErr ?: 'Unknown error',
             'url'          => $url,
-            'fallback'     => $fallback
+            'data'         => $unavailable
         ], JSON_PRETTY_PRINT);
         exit;
     }
-    echo json_encode($fallback);
+    echo json_encode($unavailable);
 } catch (Exception $e) {
-    $fallback = dummyData($barangay);
-    $fallback['barangay']  = $barangay;
-    $fallback['timestamp'] = date('Y-m-d H:i:s');
-    $fallback['status']    = 'degraded';
-    $fallback['source']    = 'dummy-fallback';
-    $fallback['device_ip'] = $device_ip;
+    // Exception caught -> return unavailable status (no dummy data for Malanday)
+    $unavailable = [
+        'barangay'  => $barangay,
+        'timestamp' => date('Y-m-d H:i:s'),
+        'status'    => 'offline',
+        'source'    => 'esp32',
+        'device_ip' => $device_ip,
+        'error'     => true,
+        'message'   => 'ESP32 device unavailable: ' . $e->getMessage(),
+        'temperature' => null,
+        'humidity' => null,
+        'waterPercent' => null,
+        'floodLevel' => 'Unknown',
+        'airQuality' => null,
+        'gasAnalog' => null,
+        'gasVoltage' => null
+    ];
 
     if ($debug) {
         echo json_encode([
             'proxy_status' => 'error',
             'message'      => $e->getMessage(),
             'url'          => $url,
-            'fallback'     => $fallback
+            'data'         => $unavailable
         ], JSON_PRETTY_PRINT);
         exit;
     }
-    echo json_encode($fallback);
+    echo json_encode($unavailable);
 }

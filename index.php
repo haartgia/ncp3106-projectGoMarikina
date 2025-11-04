@@ -1,7 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
 // Load announcements from DB if table exists; otherwise fallback to session
 $announcements = [];
@@ -31,7 +29,7 @@ $announcementCount = is_array($announcements) ? count($announcements) : 0;
 // Load reports from DB for consistency across users
 $reports = [];
 try {
-    $sql = "SELECT id, title, category, description, location, image_path, status, created_at FROM reports ORDER BY created_at DESC LIMIT 200";
+    $sql = "SELECT id, title, category, description, location, latitude, longitude, image_path, status, created_at FROM reports ORDER BY created_at DESC LIMIT 200";
     $res = $conn->query($sql);
     if ($res) {
         while ($r = $res->fetch_assoc()) {
@@ -42,6 +40,8 @@ try {
                 'status' => $r['status'] ?? 'unresolved',
                 'reporter' => 'Resident',
                 'location' => $r['location'] ?? '',
+                'latitude' => $r['latitude'] ?? null,
+                'longitude' => $r['longitude'] ?? null,
                 'submitted_at' => $r['created_at'] ?? null,
                 'summary' => $r['description'] ?? '',
                 'image' => $r['image_path'] ?? null,
@@ -53,6 +53,16 @@ try {
     // Fallback to session if DB unavailable
     $reports = $_SESSION['reports'] ?? [];
 }
+
+// Pagination for reports: show 9 per page by default
+$perPage = 9;
+$totalReports = is_array($reports) ? count($reports) : 0;
+$totalPages = max(1, (int)ceil($totalReports / max(1, $perPage)));
+$currentPage = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($currentPage < 1) { $currentPage = 1; }
+if ($currentPage > $totalPages) { $currentPage = $totalPages; }
+$offset = ($currentPage - 1) * $perPage;
+$reportsPage = array_slice($reports, $offset, $perPage);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -248,8 +258,8 @@ try {
                 </div>
 
                 <?php if ($reports): ?>
-                    <div class="reports-list" data-empty-message="No reports match your filters yet.">
-                        <?php foreach ($reports as $report): ?>
+                    <div id="reportsList" class="reports-list" data-empty-message="No reports match your filters yet.">
+                        <?php foreach ($reportsPage as $report): ?>
                             <?php
                                 $rawStatus = strtolower((string) ($report['status'] ?? 'unresolved'));
                                 $datasetStatus = str_replace('-', '_', $rawStatus);
@@ -263,7 +273,10 @@ try {
 
                                 $submittedDisplay = format_datetime_display($report['submitted_at'] ?? null);
                                 $imagePath = $report['image'] ?? null;
-                                $titleDisplay = htmlspecialchars($report['title'] ?? 'Citizen report', ENT_QUOTES, 'UTF-8');
+                                $titleRaw = (string)($report['title'] ?? 'Citizen report');
+                                $titleDisplay = htmlspecialchars($titleRaw, ENT_QUOTES, 'UTF-8');
+                                // Card heading should be a fixed-length preview (30 chars + ...)
+                                $titleShortDisplay = htmlspecialchars(function_exists('truncate_text') ? truncate_text($titleRaw, 30, '...') : (strlen($titleRaw) > 30 ? substr($titleRaw, 0, 30) . '...' : $titleRaw), ENT_QUOTES, 'UTF-8');
                                 $reporterDisplay = htmlspecialchars($report['reporter'] ?? 'Resident', ENT_QUOTES, 'UTF-8');
                                 $locationDisplay = !empty($report['location']) ? htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8') : '';
                                 // Full, sanitized summary for attributes/modal
@@ -333,7 +346,7 @@ try {
                                         </div>
                                         <div>
                                             <div class="report-title-row">
-                                                <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleDisplay; ?></h3>
+                                                <h3 title="<?php echo $titleDisplay; ?>"><?php echo $titleShortDisplay; ?></h3>
                                                 <span class="report-meta">Submitted <?php echo $submittedAttr; ?></span>
                                             </div>
                                             <p class="report-meta-row">
@@ -391,6 +404,20 @@ try {
                             </article>
                         <?php endforeach; ?>
                     </div>
+                    <?php if ($totalPages > 1): ?>
+                        <?php 
+                            $self = basename($_SERVER['PHP_SELF']);
+                            $prev = max(1, $currentPage - 1);
+                            $next = min($totalPages, $currentPage + 1);
+                        ?>
+                        <nav id="reportsPager" class="pager" aria-label="Reports pagination">
+                            <div class="pager-inner">
+                                <a class="pager-btn" href="<?= htmlspecialchars($self) ?>?page=<?= $prev ?>#reports" aria-disabled="<?= $currentPage <= 1 ? 'true' : 'false' ?>">Prev</a>
+                                <span class="pager-info">Page <?= $currentPage ?> of <?= $totalPages ?></span>
+                                <a class="pager-btn" href="<?= htmlspecialchars($self) ?>?page=<?= $next ?>#reports" aria-disabled="<?= $currentPage >= $totalPages ? 'true' : 'false' ?>">Next</a>
+                            </div>
+                        </nav>
+                    <?php endif; ?>
                 <?php else: ?>
                     <div class="reports-list" data-empty-message="No reports match your filters yet.">
                         <div class="reports-empty-state">No reports available yet.</div>

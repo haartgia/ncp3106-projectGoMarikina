@@ -1,9 +1,16 @@
 <?php
-// Mark all notifications as read for the signed-in user.
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+/**
+ * Notifications: Mark All Read
+ *
+ * Endpoint: POST /api/notifications_mark_read.php
+ * Purpose: Mark all notifications as read for the current user.
+ * Auth: Requires user session
+ *
+ * Response:
+ * - 200: { success: true }
+ * - 4xx/5xx: { success: false, message }
+ */
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if (!is_logged_in()) {
     http_response_code(401);

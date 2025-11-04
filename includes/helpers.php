@@ -200,3 +200,29 @@ if (!function_exists('summarize_location')) {
     }
 }
 
+if (!function_exists('truncate_text')) {
+    /**
+     * Truncate a string to a maximum length and append ellipsis.
+     * Uses multibyte-safe functions when available.
+     *
+     * Examples:
+     *  truncate_text('Hello world', 5) => 'Hello...'
+     *  truncate_text('Short', 25) => 'Short'
+     */
+    function truncate_text(?string $value, int $limit = 25, string $ellipsis = '...'): string
+    {
+        $s = trim((string)$value);
+        if ($s === '') {
+            return '';
+        }
+
+        $len = function_exists('mb_strlen') ? mb_strlen($s, 'UTF-8') : strlen($s);
+        if ($len <= $limit) {
+            return $s;
+        }
+
+        $slice = function_exists('mb_substr') ? mb_substr($s, 0, $limit, 'UTF-8') : substr($s, 0, $limit);
+        return rtrim($slice) . $ellipsis;
+    }
+}
+

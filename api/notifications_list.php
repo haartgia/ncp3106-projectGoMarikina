@@ -1,12 +1,20 @@
 <?php
-// Return notifications for the signed-in user.
-// GET params: limit (int, optional)
-// Response: { success: true, data: [ { id, title, meta, created_at, type, is_read } ], unreadCount: n }
+/**
+ * Notifications: List
+ *
+ * Endpoint: GET /api/notifications_list.php
+ * Purpose: Return notifications for the signed-in user.
+ * Auth: Requires user session
+ *
+ * Query params:
+ * - limit (int, optional; default 20, max 100)
+ *
+ * Response:
+ * - 200: { success: true, data: [ { id, title, meta, type, is_read, created_at } ], unreadCount }
+ * - 4xx/5xx: { success: false, message }
+ */
 
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if (!is_logged_in()) {
     http_response_code(401);

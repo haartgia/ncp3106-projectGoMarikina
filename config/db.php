@@ -23,4 +23,27 @@ try {
     // Friendly message for browser users; don't leak credentials or internals.
     die('Database connection unavailable. Please ensure MySQL (MariaDB) is running and accessible.');
 }
+
+/**
+ * Get a new database connection
+ * Returns a mysqli connection object
+ */
+function get_db_connection() {
+    $host = "localhost";
+    $user = "root";
+    $pass = "";
+    $db   = "user_db";
+    
+    mysqli_report(MYSQLI_REPORT_OFF);
+    try {
+        $conn = new mysqli($host, $user, $pass, $db);
+        if ($conn->connect_error) {
+            throw new Exception('DB connect error: ' . $conn->connect_error);
+        }
+        return $conn;
+    } catch (Throwable $e) {
+        error_log('DB connection exception: ' . $e->getMessage());
+        throw new Exception('Database connection unavailable: ' . $e->getMessage());
+    }
+}
 ?>

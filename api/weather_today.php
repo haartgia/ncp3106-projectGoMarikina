@@ -1,6 +1,12 @@
 <?php
-// Simple weather proxy for Marikina using Open-Meteo (no API key required)
-// Docs: https://open-meteo.com/en/docs
+/**
+ * Weather: Today (Open‑Meteo proxy)
+ *
+ * Endpoint: GET /api/weather_today.php
+ * Purpose: Lightweight weather snapshot for Marikina using Open‑Meteo (no API key).
+ * Docs: https://open-meteo.com/en/docs
+ * Auth: Not required
+ */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=300, s-maxage=300');
 

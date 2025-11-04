@@ -1,6 +1,18 @@
 <?php
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
+/**
+ * Announcements: List
+ *
+ * Endpoint: GET /api/announcements_list.php
+ * Purpose: Return recent announcements (DB-first with session fallback).
+ * Auth: Not required
+ *
+ * Query params:
+ * - limit (int, optional; default 200, max 200)
+ *
+ * Response:
+ * - 200: { success: true, data: [ { id, title, body, image, created_at } ] }
+ */
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 header('Content-Type: application/json');
 

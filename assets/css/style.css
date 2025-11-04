@@ -1,3 +1,18 @@
+/*
+ * GO! MARIKINA – Application Stylesheet
+ *
+ * Structure (search these headers):
+ * - Design tokens and globals
+ * - Utilities (truncate, layout helpers)
+ * - Layout (sidebar, main, sections)
+ * - Components (cards, lists, modals, pagers)
+ * - Pages (dashboard, admin, archives, auth)
+ *
+ * Notes:
+ * - Prefer component-scoped selectors and CSS variables.
+ * - Keep comments as section markers; avoid restating obvious rules.
+ */
+
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 /* === Design tokens and global defaults ============================ */
@@ -34,6 +49,10 @@
   box-sizing: border-box;
 }
 
+/* Ensure any element with the [hidden] attribute is truly hidden,
+   regardless of component display rules */
+[hidden] { display: none !important; }
+
 html {
   font-size: 16px;
   scroll-behavior: smooth;
@@ -51,6 +70,58 @@ body {
 body.nav-open,
 body.modal-open {
   overflow: hidden;
+}
+
+/* === Utility classes for text truncation ============================ */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-truncate-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.text-truncate-3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.text-truncate-4 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.text-truncate-5 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.text-truncate-6 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
 }
 
 /* Modal Styles */
@@ -408,6 +479,48 @@ body.modal-open {
   padding: 0;
 }
 
+/* === Simple pager =============================================== */
+.pager { margin: 16px 0; display:flex; justify-content:center; }
+.pager-inner { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pager-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:6px 10px; border-radius:8px; border:1px solid rgba(15,23,42,.15);
+  color: var(--text, #0f172a); background:#fff; text-decoration:none; font-size:13px;
+}
+.pager-btn:hover { background:#f8fafc; }
+.pager-btn[aria-disabled="true"] { opacity:.45; pointer-events:none; }
+.pager-info { font-size:13px; color:#475569; padding:0 6px; }
+
+/* Smooth appearance for report cards when the page loads or content swaps */
+@keyframes cardFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.reports-list .report-card { animation: cardFadeUp .35s ease both; }
+/* Stagger up to 12 cards (9 used by default) */
+.reports-list .report-card:nth-child(1) { animation-delay: .00s; }
+.reports-list .report-card:nth-child(2) { animation-delay: .03s; }
+.reports-list .report-card:nth-child(3) { animation-delay: .06s; }
+.reports-list .report-card:nth-child(4) { animation-delay: .09s; }
+.reports-list .report-card:nth-child(5) { animation-delay: .12s; }
+.reports-list .report-card:nth-child(6) { animation-delay: .15s; }
+.reports-list .report-card:nth-child(7) { animation-delay: .18s; }
+.reports-list .report-card:nth-child(8) { animation-delay: .21s; }
+.reports-list .report-card:nth-child(9) { animation-delay: .24s; }
+.reports-list .report-card:nth-child(10) { animation-delay: .27s; }
+.reports-list .report-card:nth-child(11) { animation-delay: .30s; }
+.reports-list .report-card:nth-child(12) { animation-delay: .33s; }
+
+/* Optional: fade the list out just before swapping content (used by JS fallback) */
+.reports-list.is-out { opacity: 0; transition: opacity .18s ease; }
+
+/* Smooth appearance for announcements when content swaps */
+#announcementsList .announcement-card { animation: cardFadeUp .35s ease both; }
+#announcementsList .announcement-card:nth-child(1) { animation-delay: .00s; }
+#announcementsList .announcement-card:nth-child(2) { animation-delay: .03s; }
+#announcementsList .announcement-card:nth-child(3) { animation-delay: .06s; }
+#announcementsList .announcement-card:nth-child(4) { animation-delay: .09s; }
+#announcementsList .announcement-card:nth-child(5) { animation-delay: .12s; }
+#announcementsList .announcement-card:nth-child(6) { animation-delay: .15s; }
+#announcementsList.is-out { opacity: 0; transition: opacity .18s ease; }
+
 .modal-announcement-item {
   padding: 1.5rem;
   background: rgba(255, 255, 255, 0.1);
@@ -494,6 +607,12 @@ body.modal-open {
   color: white;
   font-weight: 500;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .announcement-date {
@@ -518,6 +637,12 @@ body.modal-open {
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
 }
 
 .modal-empty {
@@ -1335,10 +1460,11 @@ body.nav-open .sidebar-logo {
 /* Lightweight carousel styles for announcements (no Bootstrap required) */
 #announcementsCarousel { 
   position: relative;
+  padding: 8px 0;
 }
 #announcementsCarousel .carousel-inner { 
   position: relative; 
-  overflow: hidden;
+  overflow: visible;
   transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 #announcementsCarousel .carousel-item { 
@@ -1898,6 +2024,10 @@ body.nav-open .sidebar-logo {
   gap: 14px;
 }
 
+/* Allow the text column inside the author row to shrink so ellipsis works.
+   This is required for flex children; otherwise long text can overflow. */
+.report-author > div { min-width: 0; flex: 1 1 auto; }
+
 .author-avatar {
   width: 52px;
   height: 52px;
@@ -1924,6 +2054,11 @@ body.nav-open .sidebar-logo {
   font-weight: 700;
   color: #1a1f36;
   margin-bottom: 0; /* tighter spacing to the meta line */
+  /* Keep the title to a single line across viewports so cards don't
+     change height when titles are long. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .report-title-row {
@@ -1934,9 +2069,21 @@ body.nav-open .sidebar-logo {
   gap: 2px; /* reduce gap so title and date/time are closer */
 }
 
+/* Ensure the title inside the row always truncates to a single line */
+.report-title-row h3 {
+  margin: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .report-author p {
   font-size: 0.9rem;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .report-meta {
   font-size: 0.875rem;
@@ -3602,6 +3749,20 @@ body.nav-open .nav-scrim {
   gap: 8px;
 }
 
+.form-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-field .char-counter {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .form-label {
   font-size: 0.9rem;
   font-weight: 600;
@@ -4225,6 +4386,164 @@ body.nav-open .nav-scrim {
 .auth-card[data-auth-mode="signup"] .auth-footer-login,
 .auth-card[data-auth-mode="signup"] .auth-links {
   display: none;
+}
+
+/* Password requirements under Sign Up password field */
+.password-reqs {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.password-reqs ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding-left: 0;
+  display: grid;
+  gap: 6px;
+}
+.password-reqs li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.password-reqs li::before {
+  content: '•';
+  color: var(--text-muted);
+  display: inline-block;
+  width: 1em;
+}
+.password-reqs li.valid {
+  color: #1a7f37; /* green */
+}
+.password-reqs li.valid::before {
+  content: '✓';
+  color: #1a7f37;
+  font-weight: 700;
+}
+.password-reqs li.invalid {
+  color: var(--text-muted);
+}
+
+/* Green state for the "Show password" button when all requirements are met */
+/* Show password button placed below the input */
+.auth-toggle-below {
+  position: static;
+  transform: none;
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: transparent;
+}
+.auth-toggle-below .auth-toggle-icon {
+  width: 20px;
+  height: 12px;
+}
+
+/* Strong password indicator */
+.password-strong {
+  margin-top: 6px;
+  color: #1a7f37; /* green */
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* Strength meter */
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.password-strength__bar {
+  flex: 1 1 auto;
+  height: 8px;
+  background: #e9eef7;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.password-strength__fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: #d84545; /* default weak */
+  transition: width 200ms ease, background-color 200ms ease;
+}
+.password-strength__label {
+  min-width: 84px;
+  text-transform: capitalize;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.password-strength[data-level="weak"] .password-strength__fill { background: #d84545; }
+.password-strength[data-level="moderate"] .password-strength__fill { background: #f59e0b; }
+.password-strength[data-level="strong"] .password-strength__fill { background: #1a7f37; }
+
+/* Wrapper for meter + tooltip so the tooltip can anchor to the meter */
+.password-feedback { position: relative; }
+
+/* Tooltip panel for password requirements */
+.password-tooltip {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  background: #fff;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-hard);
+  padding: 12px 14px;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(90vw, 360px);
+  z-index: 20;
+}
+.password-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: var(--arrow-left, 24px);
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-left: 1px solid var(--border-soft);
+  border-top: 1px solid var(--border-soft);
+  transform: rotate(45deg);
+}
+.password-tooltip__title {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  margin: 0 0 8px 0;
+}
+.password-tooltip .password-reqs { margin-top: 0; }
+.password-tooltip ul { gap: 8px; }
+
+/* Horizontal, compact Sign Up layout on desktop */
+@media (min-width: 900px) {
+  /* Make the auth card a bit wider when Sign Up is active */
+  .auth-card[data-auth-mode="signup"] { max-width: 860px; }
+
+  /* Two-column grid layout for signup form */
+  .auth-form-signup:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px;
+    row-gap: 14px;
+    align-items: end;
+  }
+
+  /* Let the first/last name row contribute its children directly to the grid */
+  .auth-form-signup .auth-field-row { display: contents; }
+
+  /* Full-width elements in the grid */
+  .auth-form-signup .password-feedback,
+  .auth-form-signup #signupPasswordStrength,
+  .auth-form-signup .auth-submit { grid-column: 1 / -1; }
 }
 
 @media (max-width: 960px) {
@@ -5241,6 +5560,31 @@ body.nav-open .nav-scrim {
   color: var(--sidebar-bg);
 }
 
+/* Device status pill (Online/Offline/Unknown) */
+.city-device-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(148,163,184,.2); /* default unknown gray */
+  color: #334155;
+}
+.city-device-pill .device-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #64748b;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.6) inset;
+}
+.city-device-pill.device-online { background: rgba(22,163,74,.12); color: #14532d; }
+.city-device-pill.device-online .device-dot { background: #16a34a; }
+.city-device-pill.device-offline { background: rgba(239,68,68,.12); color: #7f1d1d; }
+.city-device-pill.device-offline .device-dot { background: #ef4444; }
+.city-device-pill.device-unknown { background: rgba(148,163,184,.18); color: #334155; }
+.city-device-pill.device-unknown .device-dot { background: #94a3b8; }
+
 .city-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -5308,6 +5652,14 @@ body.nav-open .nav-scrim {
   font-weight: 700;
   color: #0d1e42;
   line-height: 1;
+}
+
+/* Smaller font size for "Unavailable" text */
+.city-metric-value .unavailable-text {
+  font-size: clamp(1.3rem, 2vw, 1.6rem) !important;
+  color: rgba(13, 61, 135, 0.5);
+  font-style: italic;
+  font-weight: 600;
 }
 
 .city-metric-unit {
@@ -5584,6 +5936,10 @@ body.nav-open .nav-scrim {
   padding: 16px 18px;
   text-align: left;
   border-bottom: 1px solid rgba(13, 61, 135, 0.08);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-table th {
@@ -5798,6 +6154,13 @@ body.nav-open .nav-scrim {
 .announcement-card__header h3 {
   font-size: 1.1rem;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
 }
 
 .announcement-card__header time {
@@ -5810,6 +6173,12 @@ body.nav-open .nav-scrim {
   line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-wrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
 
 .announcement-card__footer {
@@ -5867,6 +6236,21 @@ body.nav-open .nav-scrim {
   gap: 8px;
   font-weight: 600;
   color: var(--text-muted);
+  position: relative;
+}
+
+.announcement-label-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.announcement-form .char-counter {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .announcement-form input,
@@ -5935,8 +6319,7 @@ body.nav-open .nav-scrim {
 
 /* === Public announcements strip ================================== */
 .announcements-section {
-  margin: 48px 0 56px;
-  padding: clamp(24px, 4vw, 48px);
+  padding: clamp(32px, 4vw, 56px);
   border-radius: var(--radius-large);
   background: linear-gradient(135deg, rgba(246, 249, 255, 0.96), rgba(227, 237, 255, 0.78));
   border: 1px solid rgba(13, 61, 135, 0.08);
@@ -5950,6 +6333,7 @@ body.nav-open .nav-scrim {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  border-radius: inherit; /* ensure overlay respects parent rounding */
   background: radial-gradient(circle at top right, rgba(22, 93, 216, 0.12), transparent 60%),
               radial-gradient(circle at bottom left, rgba(16, 32, 63, 0.08), transparent 55%);
 }
@@ -6053,6 +6437,7 @@ body.nav-open .nav-scrim {
 
 .announcements-subtitle {
   margin-top: 8px;
+  margin-bottom: 8px;
   max-width: 560px;
   color: var(--text-muted);
   font-size: 1rem;
@@ -6070,8 +6455,8 @@ body.nav-open .nav-scrim {
 .public-announcement-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 22px;
+  gap: 18px;
+  padding: 24px;
   border-radius: var(--radius-medium);
   background: var(--surface);
   border: 1px solid rgba(13, 61, 135, 0.08);
@@ -6081,17 +6466,18 @@ body.nav-open .nav-scrim {
               max-height 0.4s ease;
   min-height: 220px;
   will-change: transform;
+  overflow: visible;
 }
 
 .public-announcement-card:hover {
-  transform: translateY(-6px) scale(1.01);
+  transform: translateY(-4px) scale(1.005);
   box-shadow: 0 32px 62px -30px rgba(13, 61, 135, 0.45);
 }
 
 .public-announcement-card__header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   transition: transform 0.3s ease;
 }
 
@@ -6100,6 +6486,12 @@ body.nav-open .nav-scrim {
   color: var(--text-primary);
   line-height: 1.35;
   transition: color 0.2s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .public-announcement-card__header time {
@@ -6116,6 +6508,11 @@ body.nav-open .nav-scrim {
   white-space: pre-wrap;
   transition: max-height 0.4s ease, opacity 0.3s ease;
   overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  -webkit-box-orient: vertical;
 }
 
 .public-announcement-card__footer {

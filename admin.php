@@ -1,7 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 require_admin();
 
 // Non-JS fallback: allow status updates/archives via POST to this page
@@ -45,19 +43,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// Load reports from DB
+// Load reports from DB with pagination
 $reports = [];
 $feedback = $_SESSION['admin_feedback'] ?? null;
 unset($_SESSION['admin_feedback']);
 
+// Pagination settings: 10 per page
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 10;
+$totalReports = 0;
+$totalPages = 1;
+$statusCounts = [
+    'unresolved' => 0,
+    'in_progress' => 0,
+    'solved' => 0,
+];
+$latestReport = null;
+$categories = [];
+
 try {
-    // Join with users to show reporter name/email to admins when available
-    $sql = "SELECT r.id, r.title, r.category, r.description, r.location, r.image_path, r.status, r.created_at, r.user_id, u.first_name, u.last_name, u.email
+    // Totals and status counts (for summary cards)
+    if ($resCnt = $conn->query('SELECT COUNT(*) AS c FROM reports')) {
+        $rowCnt = $resCnt->fetch_assoc();
+        $totalReports = (int)($rowCnt['c'] ?? 0);
+        $resCnt->close();
+    }
+    if ($resSC = $conn->query("SELECT status, COUNT(*) AS c FROM reports GROUP BY status")) {
+        while ($row = $resSC->fetch_assoc()) {
+            $st = $row['status'] ?? '';
+            $c = (int)($row['c'] ?? 0);
+            if (isset($statusCounts[$st])) $statusCounts[$st] = $c;
+        }
+        $resSC->close();
+    }
+
+    // Latest report for hero card
+    if ($resLatest = $conn->query("SELECT r.id, r.title, r.created_at, u.first_name, u.last_name, u.email FROM reports r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 1")) {
+        if ($lr = $resLatest->fetch_assoc()) {
+            $reporter = 'Resident';
+            if (!empty($lr['first_name']) || !empty($lr['last_name'])) {
+                $reporter = trim(($lr['first_name'] ?? '') . ' ' . ($lr['last_name'] ?? ''));
+            } elseif (!empty($lr['email'])) {
+                $reporter = $lr['email'];
+            }
+            $latestReport = [
+                'id' => (int)($lr['id'] ?? 0),
+                'title' => $lr['title'] ?? 'Citizen report',
+                'reporter' => $reporter,
+                'submitted_at' => $lr['created_at'] ?? null,
+            ];
+        }
+        $resLatest->close();
+    }
+
+    // Compute total pages and clamp page
+    $totalPages = max(1, (int)ceil($totalReports / $perPage));
+    if ($page > $totalPages) { $page = $totalPages; }
+    $offset = ($page - 1) * $perPage;
+
+    // Paged list of reports for the table
+    $stmt = $conn->prepare("SELECT r.id, r.title, r.category, r.description, r.location, r.latitude, r.longitude, r.image_path, r.status, r.created_at, r.user_id, u.first_name, u.last_name, u.email
             FROM reports r
             LEFT JOIN users u ON u.id = r.user_id
-            ORDER BY r.created_at DESC LIMIT 500";
-    $res = $conn->query($sql);
-    if ($res) {
+            ORDER BY r.created_at DESC LIMIT ? OFFSET ?");
+    if ($stmt) {
+        $stmt->bind_param('ii', $perPage, $offset);
+        $stmt->execute();
+        $res = $stmt->get_result();
         while ($r = $res->fetch_assoc()) {
             $reporter = 'Resident';
             if (!empty($r['first_name']) || !empty($r['last_name'])) {
@@ -65,57 +117,38 @@ try {
             } elseif (!empty($r['email'])) {
                 $reporter = $r['email'];
             }
-
             $reports[] = [
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'category' => $r['category'],
                 'reporter' => $reporter,
                 'location' => $r['location'],
+                'latitude' => $r['latitude'] ?? null,
+                'longitude' => $r['longitude'] ?? null,
                 'submitted_at' => $r['created_at'],
                 'summary' => $r['description'],
                 'image' => $r['image_path'],
                 'status' => $r['status'],
             ];
         }
+        $stmt->close();
+    }
+
+    // Build a unique list of categories for the admin filter menu (from all reports)
+    if ($resCats = $conn->query("SELECT DISTINCT category FROM reports WHERE category IS NOT NULL AND category <> ''")) {
+        while ($row = $resCats->fetch_assoc()) {
+            $lbl = category_label($row['category'] ?? '');
+            if ($lbl !== '' && !in_array($lbl, $categories, true)) $categories[] = $lbl;
+        }
+        $resCats->close();
     }
 } catch (Throwable $e) {
     $reports = [];
 }
 
-$totalReports = count($reports);
-$statusCounts = [
-    'unresolved' => 0,
-    'in_progress' => 0,
-    'solved' => 0,
-];
-
-foreach ($reports as $report) {
-    $status = $report['status'] ?? 'unresolved';
-    if (isset($statusCounts[$status])) {
-        $statusCounts[$status]++;
-    }
-}
-
-$resolvedRate = $totalReports > 0
-    ? round(($statusCounts['solved'] / $totalReports) * 100)
-    : 0;
-$openRate = $totalReports > 0
-    ? round(($statusCounts['unresolved'] / $totalReports) * 100)
-    : 0;
-$inProgressRate = $totalReports > 0
-    ? round(($statusCounts['in_progress'] / $totalReports) * 100)
-    : 0;
-
-$latestReport = $reports[0] ?? null;
-
-// Build a unique list of categories for the admin filter menu
-$categories = [];
-foreach ($reports as $rpt) {
-    $lbl = category_label($rpt['category'] ?? '');
-    if ($lbl === '') continue;
-    if (!in_array($lbl, $categories, true)) $categories[] = $lbl;
-}
+$resolvedRate = $totalReports > 0 ? (int)round(($statusCounts['solved'] / $totalReports) * 100) : 0;
+$openRate = $totalReports > 0 ? (int)round(($statusCounts['unresolved'] / $totalReports) * 100) : 0;
+$inProgressRate = $totalReports > 0 ? (int)round(($statusCounts['in_progress'] / $totalReports) * 100) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -332,6 +365,23 @@ foreach ($reports as $rpt) {
                             </tbody>
                         </table>
                     </div>
+                    <?php
+                        // Pagination controls
+                        if ($totalPages > 1):
+                            $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                            $qs = $_GET; unset($qs['page']);
+                            $buildUrl = function($p) use ($baseUrl, $qs){ $qs2 = $qs; $qs2['page'] = $p; return htmlspecialchars($baseUrl . '?' . http_build_query($qs2), ENT_QUOTES, 'UTF-8'); };
+                    ?>
+                    <nav class="pager" aria-label="Reports pagination">
+                        <div class="pager-inner">
+                            <a class="pager-btn" href="<?= $buildUrl(1) ?>" aria-label="First page"<?= $page <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>« First</a>
+                            <a class="pager-btn" href="<?= $buildUrl(max(1, $page-1)) ?>" aria-label="Previous page"<?= $page <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>‹ Prev</a>
+                            <span class="pager-info">Page <?= (int)$page ?> of <?= (int)$totalPages ?></span>
+                            <a class="pager-btn" href="<?= $buildUrl(min($totalPages, $page+1)) ?>" aria-label="Next page"<?= $page >= $totalPages ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Next ›</a>
+                            <a class="pager-btn" href="<?= $buildUrl($totalPages) ?>" aria-label="Last page"<?= $page >= $totalPages ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Last »</a>
+                        </div>
+                    </nav>
+                    <?php endif; ?>
                 <?php else: ?>
                     <div class="admin-empty-card">
                         <h3>No reports yet</h3>

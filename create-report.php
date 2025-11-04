@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 ?>
 
 <!DOCTYPE html>
@@ -78,13 +78,19 @@ require __DIR__ . '/config/auth.php';
                         </div>
 
                         <div class="form-field">
-                            <label class="form-label" for="title">TITLE</label>
-                            <input type="text" id="title" name="title" class="form-input" placeholder="Enter a title for your concern..." required>
+                            <div class="form-field-header">
+                                <label class="form-label" for="title">TITLE</label>
+                                <small class="char-counter"><span id="title-count">0</span>/50</small>
+                            </div>
+                            <input type="text" id="title" name="title" class="form-input" placeholder="Enter a title for your concern..." maxlength="50" required>
                         </div>
 
                         <div class="form-field">
-                            <label class="form-label" for="description">DESCRIPTION</label>
-                            <textarea id="description" name="description" class="form-input form-textarea" placeholder="Describe your concern..." required></textarea>
+                            <div class="form-field-header">
+                                <label class="form-label" for="description">DESCRIPTION</label>
+                                <small class="char-counter"><span id="description-count">0</span>/300</small>
+                            </div>
+                            <textarea id="description" name="description" class="form-input form-textarea" placeholder="Describe your concern..." maxlength="300" required></textarea>
                         </div>
 
                         <div class="form-field">

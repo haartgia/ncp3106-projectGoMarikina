@@ -1,7 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 require_admin();
 
 // Handle POST actions
@@ -50,17 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $archiveFeedback = $_SESSION['archive_feedback'] ?? null;
 unset($_SESSION['archive_feedback']);
 
-// Load archived reports
+// Pagination settings
+$rpage = max(1, (int)($_GET['rpage'] ?? 1));
+$apage = max(1, (int)($_GET['apage'] ?? 1));
+$perPage = 10;
 $archivedReports = [];
+$archivedAnnouncements = [];
+$totalArchivedReports = 0;
+$totalArchivedAnnouncements = 0;
+$totalArchived = 0;
+$totalPagesReports = 1;
+$totalPagesAnnouncements = 1;
+
+// Load archived reports (paged)
 try {
     $check = $conn->query("SHOW TABLES LIKE 'reports_archive'");
     if ($check && $check->num_rows > 0) {
-        $sql = "SELECT ra.id, ra.title, ra.category, ra.description, ra.location, ra.image_path, ra.status, ra.created_at, ra.archived_at, ra.archived_by, u.first_name, u.last_name, u.email
+        if ($resCnt = $conn->query('SELECT COUNT(*) AS c FROM reports_archive')) {
+            $rowCnt = $resCnt->fetch_assoc();
+            $totalArchivedReports = (int)($rowCnt['c'] ?? 0);
+            $resCnt->close();
+        }
+        $totalPagesReports = max(1, (int)ceil($totalArchivedReports / $perPage));
+        if ($rpage > $totalPagesReports) { $rpage = $totalPagesReports; }
+        $offset = ($rpage - 1) * $perPage;
+
+        $stmt = $conn->prepare("SELECT ra.id, ra.title, ra.category, ra.description, ra.location, ra.image_path, ra.status, ra.created_at, ra.archived_at, ra.archived_by, u.first_name, u.last_name, u.email
                 FROM reports_archive ra
                 LEFT JOIN users u ON u.id = ra.user_id
-                ORDER BY ra.archived_at DESC LIMIT 500";
-        $res = $conn->query($sql);
-        if ($res) {
+                ORDER BY ra.archived_at DESC LIMIT ? OFFSET ?");
+        if ($stmt) {
+            $stmt->bind_param('ii', $perPage, $offset);
+            $stmt->execute();
+            $res = $stmt->get_result();
             while ($r = $res->fetch_assoc()) {
                 $reporter = 'Resident';
                 if (!empty($r['first_name']) || !empty($r['last_name'])) {
@@ -82,20 +102,31 @@ try {
                     'status' => $r['status'],
                 ];
             }
+            $stmt->close();
         }
     }
 } catch (Throwable $e) {
     $archivedReports = [];
 }
 
-// Load archived announcements
-$archivedAnnouncements = [];
+// Load archived announcements (paged)
 try {
     $check = $conn->query("SHOW TABLES LIKE 'announcements_archive'");
     if ($check && $check->num_rows > 0) {
-        $sql = "SELECT id, title, body, image_path, created_at, archived_at FROM announcements_archive ORDER BY archived_at DESC LIMIT 500";
-        $res = $conn->query($sql);
-        if ($res) {
+        if ($resCnt = $conn->query('SELECT COUNT(*) AS c FROM announcements_archive')) {
+            $rowCnt = $resCnt->fetch_assoc();
+            $totalArchivedAnnouncements = (int)($rowCnt['c'] ?? 0);
+            $resCnt->close();
+        }
+        $totalPagesAnnouncements = max(1, (int)ceil($totalArchivedAnnouncements / $perPage));
+        if ($apage > $totalPagesAnnouncements) { $apage = $totalPagesAnnouncements; }
+        $offsetA = ($apage - 1) * $perPage;
+
+        $stmt = $conn->prepare('SELECT id, title, body, image_path, created_at, archived_at FROM announcements_archive ORDER BY archived_at DESC LIMIT ? OFFSET ?');
+        if ($stmt) {
+            $stmt->bind_param('ii', $perPage, $offsetA);
+            $stmt->execute();
+            $res = $stmt->get_result();
             while ($a = $res->fetch_assoc()) {
                 $archivedAnnouncements[] = [
                     'id' => (int)$a['id'],
@@ -106,13 +137,14 @@ try {
                     'archived_at' => $a['archived_at'],
                 ];
             }
+            $stmt->close();
         }
     }
 } catch (Throwable $e) {
     $archivedAnnouncements = [];
 }
 
-$totalArchived = count($archivedReports) + count($archivedAnnouncements);
+$totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -147,7 +179,7 @@ $totalArchived = count($archivedReports) + count($archivedAnnouncements);
                     </div>
                     <p class="admin-hero-note">
                         <strong>Total archived items:</strong> <?php echo $totalArchived; ?><br>
-                        <span class="admin-hero-meta"><?php echo count($archivedReports); ?> reports · <?php echo count($archivedAnnouncements); ?> announcements</span>
+                        <span class="admin-hero-meta"><?php echo (int)$totalArchivedReports; ?> reports · <?php echo (int)$totalArchivedAnnouncements; ?> announcements</span>
                     </p>
                 </div>
             </header>
@@ -205,10 +237,10 @@ $totalArchived = count($archivedReports) + count($archivedAnnouncements);
 
                 <div class="archives-tabs" role="tablist">
                     <button type="button" class="archives-tab active" role="tab" aria-selected="true" aria-controls="reports-panel" id="reports-tab" data-tab="reports">
-                        Reports (<?php echo count($archivedReports); ?>)
+                        Reports (<?php echo (int)$totalArchivedReports; ?>)
                     </button>
                     <button type="button" class="archives-tab" role="tab" aria-selected="false" aria-controls="announcements-panel" id="announcements-tab" data-tab="announcements">
-                        Announcements (<?php echo count($archivedAnnouncements); ?>)
+                        Announcements (<?php echo (int)$totalArchivedAnnouncements; ?>)
                     </button>
                 </div>
 
@@ -272,6 +304,21 @@ $totalArchived = count($archivedReports) + count($archivedAnnouncements);
                                     </tbody>
                                 </table>
                             </div>
+                            <?php if ($totalPagesReports > 1):
+                                $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                                $qs = $_GET; unset($qs['rpage']);
+                                $buildUrl = function($p) use ($baseUrl, $qs){ $qs2 = $qs; $qs2['rpage'] = $p; return htmlspecialchars($baseUrl . '?' . http_build_query($qs2), ENT_QUOTES, 'UTF-8'); };
+                            ?>
+                            <nav class="pager" aria-label="Archived reports pagination">
+                                <div class="pager-inner">
+                                    <a class="pager-btn" href="<?= $buildUrl(1) ?>" aria-label="First page"<?= $rpage <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>« First</a>
+                                    <a class="pager-btn" href="<?= $buildUrl(max(1, $rpage-1)) ?>" aria-label="Previous page"<?= $rpage <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>‹ Prev</a>
+                                    <span class="pager-info">Page <?= (int)$rpage ?> of <?= (int)$totalPagesReports ?></span>
+                                    <a class="pager-btn" href="<?= $buildUrl(min($totalPagesReports, $rpage+1)) ?>" aria-label="Next page"<?= $rpage >= $totalPagesReports ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Next ›</a>
+                                    <a class="pager-btn" href="<?= $buildUrl($totalPagesReports) ?>" aria-label="Last page"<?= $rpage >= $totalPagesReports ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Last »</a>
+                                </div>
+                            </nav>
+                            <?php endif; ?>
                         <?php else: ?>
                             <div class="admin-empty-card">
                                 <h3>No archived reports</h3>
@@ -313,6 +360,21 @@ $totalArchived = count($archivedReports) + count($archivedAnnouncements);
                                     </article>
                                 <?php endforeach; ?>
                             </div>
+                            <?php if ($totalPagesAnnouncements > 1):
+                                $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                                $qs = $_GET; unset($qs['apage']);
+                                $buildUrlA = function($p) use ($baseUrl, $qs){ $qs2 = $qs; $qs2['apage'] = $p; return htmlspecialchars($baseUrl . '?' . http_build_query($qs2), ENT_QUOTES, 'UTF-8'); };
+                            ?>
+                            <nav class="pager" aria-label="Archived announcements pagination">
+                                <div class="pager-inner">
+                                    <a class="pager-btn" href="<?= $buildUrlA(1) ?>" aria-label="First page"<?= $apage <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>« First</a>
+                                    <a class="pager-btn" href="<?= $buildUrlA(max(1, $apage-1)) ?>" aria-label="Previous page"<?= $apage <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>‹ Prev</a>
+                                    <span class="pager-info">Page <?= (int)$apage ?> of <?= (int)$totalPagesAnnouncements ?></span>
+                                    <a class="pager-btn" href="<?= $buildUrlA(min($totalPagesAnnouncements, $apage+1)) ?>" aria-label="Next page"<?= $apage >= $totalPagesAnnouncements ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Next ›</a>
+                                    <a class="pager-btn" href="<?= $buildUrlA($totalPagesAnnouncements) ?>" aria-label="Last page"<?= $apage >= $totalPagesAnnouncements ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Last »</a>
+                                </div>
+                            </nav>
+                            <?php endif; ?>
                         <?php else: ?>
                             <div class="admin-empty-card">
                                 <h3>No archived announcements</h3>

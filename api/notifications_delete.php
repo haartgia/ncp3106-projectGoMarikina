@@ -1,12 +1,20 @@
 <?php
-// Delete a single notification for the signed-in user.
-// POST params: notification_id (int)
-// Response: { success: true }
+/**
+ * Notifications: Delete One
+ *
+ * Endpoint: POST /api/notifications_delete.php
+ * Purpose: Delete a single notification for the signed-in user.
+ * Auth: Requires user session
+ *
+ * Form params:
+ * - notification_id (int, required)
+ *
+ * Response:
+ * - 200: { success: true, deleted: number }
+ * - 4xx/5xx: { success: false, message }
+ */
 
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/db.php';
-
-header('Content-Type: application/json');
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

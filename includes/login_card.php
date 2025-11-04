@@ -55,16 +55,17 @@ unset($_SESSION['login_error']);
 					</label>
 				</div>
 
-				<label class="auth-field" for="signupMobile">
-					<span class="auth-field-label">Mobile Number</span>
-					<!-- PH format: +63XXXXXXXXXX (10 digits after +63). No spaces allowed. -->
-					<input type="tel" id="signupMobile" name="mobile" placeholder="+63XXXXXXXXXX" value="+63" required autocomplete="tel" pattern="\+63\d{10}" maxlength="13" inputmode="tel" />
-				</label>
-
+				<!-- Swap order: Email first, then Mobile -->
 				<label class="auth-field" for="signupEmail">
 					<span class="auth-field-label">Email</span>
 					<!-- Must include an @ and domain, no spaces -->
 					<input type="email" id="signupEmail" name="email" placeholder="Email" required autocomplete="email" pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$" />
+				</label>
+
+				<label class="auth-field" for="signupMobile">
+					<span class="auth-field-label">Mobile Number</span>
+					<!-- PH format: +63XXXXXXXXXX (10 digits after +63). No spaces allowed. -->
+					<input type="tel" id="signupMobile" name="mobile" placeholder="+63XXXXXXXXXX" value="+63" required autocomplete="tel" pattern="\+63\d{10}" maxlength="13" inputmode="tel" />
 				</label>
 
 				<label class="auth-field" for="signupPassword">
@@ -88,6 +89,30 @@ unset($_SESSION['login_error']);
 					</div>
 				</label>
 				<p id="signupConfirmHint" class="auth-error" hidden>Passwords do not match.</p>
+
+				<!-- Password feedback (meter + tooltip requirements) -->
+				<div class="password-feedback">
+					<!-- Password Strength Meter -->
+					<div id="signupPasswordMeter" class="password-strength" aria-live="polite" aria-atomic="true" hidden>
+						<div class="password-strength__bar" aria-hidden="true">
+							<span class="password-strength__fill" data-strength-fill style="width:0%"></span>
+						</div>
+						<span class="password-strength__label" data-strength-label>Weak</span>
+					</div>
+
+					<!-- Password requirements tooltip (Sign Up) -->
+					<div id="signupPasswordReqs" class="password-reqs password-tooltip" role="tooltip" aria-live="polite" aria-atomic="true" hidden>
+						<p class="password-tooltip__title">Your password must have:</p>
+						<ul>
+							<li data-rule="length" class="invalid">At least 8 characters</li>
+							<li data-rule="uppercase" class="invalid">At least 1 uppercase letter (A–Z)</li>
+							<li data-rule="number" class="invalid">At least 1 number (0–9)</li>
+							<li data-rule="special" class="invalid">At least 1 special character (!@#$…)</li>
+							<li data-rule="spaces" class="invalid">No spaces</li>
+						</ul>
+					</div>
+				</div>
+				<p id="signupPasswordStrength" class="password-strong" hidden>Strong password</p>
 
 				<button type="submit" class="auth-submit">Create Account</button>
 			</form>
@@ -251,5 +276,129 @@ unset($_SESSION['login_error']);
 		}
 		signupPwd?.addEventListener('input', validateConfirm);
 		signupConfirm?.addEventListener('input', validateConfirm);
+
+		// Live password requirements updater for Sign Up password field
+		(function initPasswordRequirements(){
+			const reqs = document.getElementById('signupPasswordReqs');
+			const signupToggle = document.querySelector('[data-password-toggle="signupPassword"]');
+			const strengthEl = document.getElementById('signupPasswordStrength');
+			const meter = document.getElementById('signupPasswordMeter');
+			const meterFill = meter ? meter.querySelector('[data-strength-fill]') : null;
+			const meterLabel = meter ? meter.querySelector('[data-strength-label]') : null;
+			if (!signupPwd || !reqs) return;
+
+			const items = {
+				length: reqs.querySelector('li[data-rule="length"]'),
+				uppercase: reqs.querySelector('li[data-rule="uppercase"]'),
+				number: reqs.querySelector('li[data-rule="number"]'),
+				special: reqs.querySelector('li[data-rule="special"]'),
+				spaces: reqs.querySelector('li[data-rule="spaces"]')
+			};
+
+			const compute = (v) => ({
+				length: (v || '').length >= 8,
+				uppercase: /[A-Z]/.test(v || ''),
+				number: /\d/.test(v || ''),
+				special: /[^A-Za-z0-9]/.test(v || ''),
+				spaces: !/\s/.test(v || '')
+			});
+
+			const computeStrength = (v) => {
+				const r = compute(v);
+				let score = 0;
+				['length','uppercase','number','special','spaces'].forEach(k => { if (r[k]) score++; });
+				// Map score to level and width
+				let level = 'weak';
+				// Proportional fill with partial credit for length up to 8 chars
+				const len = (v || '').length;
+				const lengthFraction = Math.min(len, 8) / 8; // 0..1
+				const progress = lengthFraction
+					+ (r.uppercase ? 1 : 0)
+					+ (r.number ? 1 : 0)
+					+ (r.special ? 1 : 0)
+					+ (r.spaces ? 1 : 0); // total 0..5
+				let width = Math.round((progress / 5) * 100);
+				// Strong only if ALL rules are satisfied
+				if (score === 5) { level = 'strong'; width = 100; }
+				else if (score >= 3) { level = 'moderate'; width = 60; }
+				return { level, width, score };
+			};
+
+			const update = () => {
+				const v = signupPwd.value || '';
+				const r = compute(v);
+				let allOk = true;
+				Object.keys(items).forEach((key) => {
+					const li = items[key];
+					if (!li) return;
+					const ok = !!r[key];
+					li.classList.toggle('valid', ok);
+					li.classList.toggle('invalid', !ok);
+					// Show all rules in tooltip; just change states
+					li.hidden = false;
+					if (!ok) allOk = false;
+				});
+				// Show requirements panel only when the password field is focused; hide otherwise
+				const isFocused = document.activeElement === signupPwd;
+				reqs.hidden = !isFocused;
+
+				// Update strength meter continuously
+				if (meter && meterFill && meterLabel) {
+					if (!isFocused) {
+						// Hide meter when not focused
+						meter.hidden = true;
+						meter.removeAttribute('data-level');
+						meterFill.style.width = '0%';
+						meterLabel.textContent = 'Weak';
+					} else {
+						// Show meter on focus; if empty, show 0%
+						if (!v) {
+							meter.hidden = false;
+							meter.removeAttribute('data-level');
+							meterFill.style.width = '0%';
+							meterLabel.textContent = 'Weak';
+						} else {
+							const m = computeStrength(v);
+							meter.hidden = false;
+							meter.setAttribute('data-level', m.level);
+							meterFill.style.width = m.width + '%';
+							meterLabel.textContent = m.level;
+						}
+					}
+				}
+
+				// Position tooltip to follow the bar fill; keep the arrow pointing to the fill end
+				if (isFocused && reqs && meter) {
+					const feedback = meter.closest('.password-feedback');
+					const bar = meter.querySelector('.password-strength__bar');
+					if (feedback && bar) {
+						const wrapRect = feedback.getBoundingClientRect();
+						const barRect = bar.getBoundingClientRect();
+						const pct = (meterFill && meterFill.style.width) ? (parseInt(meterFill.style.width, 10) || 0) / 100 : 0;
+						const ARROW_OFFSET = 6; // nudge arrow slightly past the rounded bar cap
+						const desiredX = (barRect.left - wrapRect.left) + (barRect.width * pct) + ARROW_OFFSET; // in wrapper coords
+						const tooltipWidth = reqs.offsetWidth || 300;
+						// Prefer arrow offset 24px from tooltip left
+						const preferredArrow = 24;
+						let left = desiredX - preferredArrow;
+						// Clamp tooltip within wrapper bounds
+						left = Math.max(0, Math.min(left, wrapRect.width - tooltipWidth));
+						// Compute arrow pos within tooltip so tip still points to desiredX
+						let arrowLeft = desiredX - left;
+						arrowLeft = Math.max(12, Math.min(arrowLeft, tooltipWidth - 24));
+						reqs.style.left = left + 'px';
+						reqs.style.setProperty('--arrow-left', arrowLeft + 'px');
+					}
+				}
+
+				// Keep old text indicator hidden (we use the meter instead)
+				if (strengthEl) strengthEl.hidden = true;
+			};
+
+			update();
+			signupPwd.addEventListener('input', update);
+			signupPwd.addEventListener('focus', update);
+			signupPwd.addEventListener('blur', update);
+		})();
 	})();
 	</script>

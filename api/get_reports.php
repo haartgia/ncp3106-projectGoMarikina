@@ -1,6 +1,19 @@
 <?php
-// Simple API to return reports with coordinates for map consumption
-require_once __DIR__ . '/../config/db.php';
+/**
+ * Reports: Map Feed
+ *
+ * Endpoint: GET /api/get_reports.php
+ * Purpose: Return reports with coordinates for map consumption (popups/modals).
+ * Auth: Not required
+ *
+ * Optional query params (viewport bounding box):
+ * - minLat, maxLat, minLng, maxLng (numbers) or south/north/west/east
+ *
+ * Response:
+ * - 200: { success: true, data: [ { id, title, category, summary, location, image, latitude, longitude, status, submitted_at } ] }
+ * - 500: { success: false, message }
+ */
+require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 // Attempt to enable gzip output if available to reduce payload size for JSON
 if (!in_array('ob_gzhandler', ob_list_handlers())) {

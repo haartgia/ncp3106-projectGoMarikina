@@ -1,7 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
-require __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 require_admin();
 
 function store_announcement_image(array $image, int $nextId): ?string
@@ -206,32 +204,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $announcements = [];
-try {
-    $check = $conn->query("SHOW TABLES LIKE 'announcements'");
-    if ($check && $check->num_rows > 0) {
-        $res = $conn->query('SELECT id, title, body, image_path, created_at FROM announcements ORDER BY created_at DESC');
-        while ($a = $res->fetch_assoc()) {
-            $announcements[] = [
-                'id' => (int)($a['id'] ?? 0),
-                'title' => $a['title'] ?? '',
-                'body' => $a['body'] ?? '',
-                'image' => $a['image_path'] ?? null,
-                'created_at' => $a['created_at'] ?? null,
-            ];
-        }
-    } else {
-        $announcements = $_SESSION['announcements'] ?? [];
-    }
-} catch (Throwable $e) {
-    $announcements = $_SESSION['announcements'] ?? [];
-}
 $announcementFeedback = $_SESSION['announcement_feedback'] ?? null;
 unset($_SESSION['announcement_feedback']);
 
+// Pagination: 3 per page for published announcements list
+$page = max(1, (int)($_GET['apage'] ?? 1));
+$perPage = 3;
+$totalAnnouncements = 0;
+$totalPages = 1;
 $latestAnnouncement = null;
-if (!empty($announcements)) {
-    $latestAnnouncement = end($announcements);
-    reset($announcements);
+
+try {
+    $check = $conn->query("SHOW TABLES LIKE 'announcements'");
+    if ($check && $check->num_rows > 0) {
+        // Totals
+        if ($resCnt = $conn->query('SELECT COUNT(*) AS c FROM announcements')) {
+            $rowCnt = $resCnt->fetch_assoc();
+            $totalAnnouncements = (int)($rowCnt['c'] ?? 0);
+            $resCnt->close();
+        }
+        $totalPages = max(1, (int)ceil($totalAnnouncements / $perPage));
+        if ($page > $totalPages) { $page = $totalPages; }
+        $offset = ($page - 1) * $perPage;
+
+        // Latest announcement for hero card note
+        if ($resLatest = $conn->query('SELECT id, title, created_at FROM announcements ORDER BY created_at DESC LIMIT 1')) {
+            $la = $resLatest->fetch_assoc();
+            if ($la) { $latestAnnouncement = $la; }
+            $resLatest->close();
+        }
+
+        // Page subset
+        $stmt = $conn->prepare('SELECT id, title, body, image_path, created_at FROM announcements ORDER BY created_at DESC LIMIT ? OFFSET ?');
+        if ($stmt) {
+            $stmt->bind_param('ii', $perPage, $offset);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            while ($a = $res->fetch_assoc()) {
+                $announcements[] = [
+                    'id' => (int)($a['id'] ?? 0),
+                    'title' => $a['title'] ?? '',
+                    'body' => $a['body'] ?? '',
+                    'image' => $a['image_path'] ?? null,
+                    'created_at' => $a['created_at'] ?? null,
+                ];
+            }
+            $stmt->close();
+        }
+    } else {
+        // Session fallback: reverse for newest first, then slice
+        $all = $_SESSION['announcements'] ?? [];
+        // ensure array
+        if (!is_array($all)) $all = [];
+        $totalAnnouncements = count($all);
+        $totalPages = max(1, (int)ceil($totalAnnouncements / $perPage));
+        if ($page > $totalPages) { $page = $totalPages; }
+        if (!empty($all)) {
+            $latestAnnouncement = $all[array_key_last($all)];
+        }
+        $allRev = array_reverse($all);
+        $slice = array_slice($allRev, ($page - 1) * $perPage, $perPage);
+        $announcements = $slice;
+    }
+} catch (Throwable $e) {
+    $all = $_SESSION['announcements'] ?? [];
+    if (!is_array($all)) $all = [];
+    $totalAnnouncements = count($all);
+    $totalPages = max(1, (int)ceil($totalAnnouncements / $perPage));
+    if ($page > $totalPages) { $page = $totalPages; }
+    if (!empty($all)) {
+        $latestAnnouncement = $all[array_key_last($all)];
+    }
+    $announcements = array_slice(array_reverse($all), ($page - 1) * $perPage, $perPage);
 }
 ?>
 <!DOCTYPE html>
@@ -240,7 +284,12 @@ if (!empty($announcements)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Announcements · GO! MARIKINA</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <?php 
+        $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+        $cssVersion = @filemtime(__DIR__ . '/assets/css/style.css') ?: time();
+        $jsVersion = @filemtime(__DIR__ . '/assets/js/script.js') ?: time();
+    ?>
+    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= $cssVersion ?>">
 </head>
 <body id="top">
     <div class="dashboard-layout admin-layout">
@@ -282,7 +331,7 @@ if (!empty($announcements)) {
             <?php endif; ?>
 
             <div class="announcement-layout">
-                <section class="admin-section announcement-feed" aria-labelledby="announcements-heading" data-announcements-view>
+                <section class="admin-section announcement-feed" aria-labelledby="announcements-heading" data-announcements-view id="announcements">
                     <div class="admin-section-header">
                         <div>
                             <h2 id="announcements-heading">Published announcements</h2>
@@ -290,13 +339,13 @@ if (!empty($announcements)) {
                         </div>
                         <div class="admin-section-actions">
                             <button type="button" class="view-all-btn" onclick="event.preventDefault(); openAnnouncementsModal();">View all announcements</button>
-                            <span class="admin-count">Total: <?php echo count($announcements); ?></span>
+                            <span class="admin-count">Total: <?php echo (int)$totalAnnouncements; ?></span>
                         </div>
                     </div>
 
                     <?php if ($announcements): ?>
-                        <ul class="announcement-list" data-announcements-list>
-                            <?php foreach (array_reverse($announcements) as $announcement): ?>
+                        <ul id="announcementsList" class="announcement-list" data-announcements-list>
+                            <?php foreach ($announcements as $announcement): ?>
                                 <li class="announcement-card" data-announcement-id="<?php echo (int) $announcement['id']; ?>">
                                     <header class="announcement-card__header">
                                         <h3><?php echo htmlspecialchars($announcement['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?></h3>
@@ -320,6 +369,21 @@ if (!empty($announcements)) {
                                 </li>
                             <?php endforeach; ?>
                         </ul>
+                        <?php if ($totalPages > 1):
+                            $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+                            $qs = $_GET; unset($qs['apage']);
+                            $buildUrl = function($p) use ($baseUrl, $qs){ $qs2 = $qs; $qs2['apage'] = $p; return htmlspecialchars($baseUrl . '?' . http_build_query($qs2), ENT_QUOTES, 'UTF-8'); };
+                        ?>
+                        <nav id="announcementsPager" class="pager" aria-label="Announcements pagination">
+                            <div class="pager-inner">
+                                <a class="pager-btn" href="<?= $buildUrl(1) ?>" aria-label="First page"<?= $page <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>« First</a>
+                                <a class="pager-btn" href="<?= $buildUrl(max(1, $page-1)) ?>" aria-label="Previous page"<?= $page <= 1 ? ' aria-disabled="true" tabindex="-1"' : '' ?>>‹ Prev</a>
+                                <span class="pager-info">Page <?= (int)$page ?> of <?= (int)$totalPages ?></span>
+                                <a class="pager-btn" href="<?= $buildUrl(min($totalPages, $page+1)) ?>" aria-label="Next page"<?= $page >= $totalPages ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Next ›</a>
+                                <a class="pager-btn" href="<?= $buildUrl($totalPages) ?>" aria-label="Last page"<?= $page >= $totalPages ? ' aria-disabled="true" tabindex="-1"' : '' ?>>Last »</a>
+                            </div>
+                        </nav>
+                        <?php endif; ?>
                     <?php else: ?>
                         <div class="announcement-empty">
                             <h3>No announcements yet</h3>
@@ -338,12 +402,18 @@ if (!empty($announcements)) {
                     <form method="post" class="announcement-form" enctype="multipart/form-data" novalidate>
                         <input type="hidden" name="action" value="add_announcement">
                         <label>
-                            <span>Headline</span>
-                            <input type="text" name="announcement_title" placeholder="e.g. Road closure along JP Rizal" required>
+                            <div class="announcement-label-header">
+                                <span>Headline</span>
+                                <small class="char-counter"><span id="headline-count">0</span>/100</small>
+                            </div>
+                            <input type="text" name="announcement_title" placeholder="e.g. Road closure along JP Rizal" maxlength="100" required>
                         </label>
                         <label>
-                            <span>Message</span>
-                            <textarea name="announcement_body" rows="6" placeholder="Add key details, affected areas, and timelines." required></textarea>
+                            <div class="announcement-label-header">
+                                <span>Message</span>
+                                <small class="char-counter"><span id="message-count">0</span>/300</small>
+                            </div>
+                            <textarea name="announcement_body" rows="6" placeholder="Add key details, affected areas, and timelines." maxlength="300" required></textarea>
                         </label>
                         <label class="announcement-file-label">
                             <span>Featured image (optional)</span>
@@ -388,6 +458,6 @@ if (!empty($announcements)) {
             </div>
         </div>
     </div>
-    <script src="assets/js/script.js" defer></script>
+    <script src="<?= $BASE ?>/assets/js/script.js?v=<?= $jsVersion ?>" defer></script>
 </body>
 </html>

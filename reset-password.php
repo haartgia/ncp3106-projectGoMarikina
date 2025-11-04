@@ -1,7 +1,5 @@
 <?php
-session_start();
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $token = $_GET['token'] ?? '';
 $error = '';
@@ -83,8 +81,11 @@ $conn->close();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reset Password · GO! MARIKINA</title>
-    <?php $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/'); ?>
-    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= time() ?>">
+    <?php 
+        $BASE = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+        $cssVersion = @filemtime(__DIR__ . '/assets/css/style.css') ?: time();
+    ?>
+    <link rel="stylesheet" href="<?= $BASE ?>/assets/css/style.css?v=<?= $cssVersion ?>">
     <style>
         /* Page layout only; all UI inherits Auth theme classes */
         .auth-page-wrap {
@@ -142,6 +143,18 @@ $conn->close();
                             </div>
                         </label>
 
+                        <!-- Password requirements list (Reset Password) -->
+                        <div id="resetPasswordReqs" class="password-reqs" aria-live="polite" aria-atomic="true">
+                            <ul>
+                                <li data-rule="length" class="invalid">At least 8 characters</li>
+                                <li data-rule="uppercase" class="invalid">At least 1 uppercase letter (A–Z)</li>
+                                <li data-rule="number" class="invalid">At least 1 number (0–9)</li>
+                                <li data-rule="special" class="invalid">At least 1 special character (!@#$…)</li>
+                                <li data-rule="spaces" class="invalid">No spaces</li>
+                            </ul>
+                        </div>
+                        <p id="resetPasswordStrength" class="password-strong" hidden>Strong password</p>
+
                         <label class="auth-field" for="confirm_password">
                             <span class="auth-field-label">Confirm Password</span>
                             <div class="auth-field-input">
@@ -170,6 +183,55 @@ $conn->close();
             const input = document.getElementById(id);
             input.type = input.type === 'password' ? 'text' : 'password';
         }
+
+        // Live password requirements for Reset Password page
+        (function initResetPasswordRequirements(){
+            const pwd = document.getElementById('password');
+            const reqs = document.getElementById('resetPasswordReqs');
+            const toggleBtn = pwd?.closest('.auth-field-input')?.querySelector('.auth-field-toggle') || null;
+            const strength = document.getElementById('resetPasswordStrength');
+            if (!pwd || !reqs) return;
+
+            const items = {
+                length: reqs.querySelector('li[data-rule="length"]'),
+                uppercase: reqs.querySelector('li[data-rule="uppercase"]'),
+                number: reqs.querySelector('li[data-rule="number"]'),
+                special: reqs.querySelector('li[data-rule="special"]'),
+                spaces: reqs.querySelector('li[data-rule="spaces"]')
+            };
+
+            const compute = (v) => ({
+                length: (v || '').length >= 8,
+                uppercase: /[A-Z]/.test(v || ''),
+                number: /\d/.test(v || ''),
+                special: /[^A-Za-z0-9]/.test(v || ''),
+                spaces: !/\s/.test(v || '')
+            });
+
+            const update = () => {
+                const v = pwd.value || '';
+                const r = compute(v);
+                let allOk = true;
+                Object.keys(items).forEach((key) => {
+                    const li = items[key];
+                    if (!li) return;
+                    const ok = !!r[key];
+                    li.classList.toggle('valid', ok);
+                    li.classList.toggle('invalid', !ok);
+                    li.hidden = ok; // hide satisfied rules
+                    if (!ok) allOk = false;
+                });
+
+                // Show box only if there's input and not all rules are met
+                reqs.hidden = !(v && !allOk);
+
+                // Show "Strong password" when all rules are satisfied
+                if (strength) strength.hidden = !(v && allOk);
+            };
+
+            ['input','focus','blur'].forEach((ev) => pwd.addEventListener(ev, update));
+            update();
+        })();
     </script>
 </body>
 </html>

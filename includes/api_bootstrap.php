@@ -11,6 +11,25 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 
+// Optional debug mode: surface PHP errors as JSON instead of blank 500s
+$__DEBUG = getenv('DEBUG') ?: '0';
+if ($__DEBUG === '1') {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '0');
+    set_error_handler(function ($severity, $message, $file, $line) {
+        throw new ErrorException($message, 0, $severity, $file, $line);
+    });
+    set_exception_handler(function ($e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Server error',
+            'error' => $e->getMessage(),
+        ]);
+        exit;
+    });
+}
+
 if (!function_exists('json_response')) {
     function json_response(array $payload, int $status = 200): void {
         http_response_code($status);

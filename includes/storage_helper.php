@@ -34,9 +34,18 @@ function store_image($file, $context = 'general') {
         'image/gif' => 'gif'
     ];
     
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
+    $mime = null;
+    if (function_exists('finfo_open')) {
+        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mime = @finfo_file($finfo, $file['tmp_name']);
+            @finfo_close($finfo);
+        }
+    }
+    if (!$mime && !empty($file['type'])) {
+        $mime = $file['type'];
+    }
+    if (!$mime) { $mime = 'application/octet-stream'; }
     
     if (!isset($allowed[$mime])) {
         return ['success' => false, 'path' => null, 'error' => 'Invalid file type. Only JPG, PNG, WEBP, and GIF allowed.'];
@@ -243,30 +252,73 @@ function store_to_cloudinary($file, $context, $ext) {
     // Prepare upload
     $url = "https://api.cloudinary.com/v1_1/$cloudName/image/upload";
     
-    // Create POST data
-    $postData = [
-        'file' => new CURLFile($file['tmp_name'], $file['type'], $file['name']),
-        'api_key' => $apiKey,
-        'timestamp' => $timestamp,
-        'signature' => $signature,
-        'folder' => $context,
-        'public_id' => $publicId
-    ];
+    // Prefer binary upload via cURL when available, otherwise fall back to data URI with stream context
+    $mime = $file['type'] ?? 'application/octet-stream';
+    $tmpPath = $file['tmp_name'];
     
-    // Upload to Cloudinary
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $postData,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30
-    ]);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
+    if (function_exists('curl_init') && class_exists('CURLFile')) {
+        // Create POST data using multipart/form-data
+        $postData = [
+            'file' => new CURLFile($tmpPath, $mime, $file['name'] ?? 'upload'),
+            'api_key' => $apiKey,
+            'timestamp' => $timestamp,
+            'signature' => $signature,
+            'folder' => $context,
+            'public_id' => $publicId
+        ];
+        
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+    } else {
+        // Fallback: send data URI via application/x-www-form-urlencoded using native streams (no cURL)
+        $bytes = @file_get_contents($tmpPath);
+        if ($bytes === false) {
+            return ['success' => false, 'path' => null, 'error' => 'Failed to read uploaded file'];
+        }
+        $dataUri = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+        
+        $fields = http_build_query([
+            'file' => $dataUri,
+            'api_key' => $apiKey,
+            'timestamp' => $timestamp,
+            'signature' => $signature,
+            'folder' => $context,
+            'public_id' => $publicId
+        ]);
+        
+        $opts = [
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n" .
+                            "Content-Length: " . strlen($fields) . "\r\n",
+                'content' => $fields,
+                'timeout' => 30
+            ]
+        ];
+        $contextRes = stream_context_create($opts);
+        $response = @file_get_contents($url, false, $contextRes);
+        $httpCode = 0;
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $hdr) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#', $hdr, $m)) {
+                    $httpCode = (int)$m[1];
+                    break;
+                }
+            }
+        }
+        $curlError = '';
+    }
     
     if ($httpCode >= 200 && $httpCode < 300) {
         $result = json_decode($response, true);
@@ -278,7 +330,8 @@ function store_to_cloudinary($file, $context, $ext) {
         }
     } else {
         error_log("Cloudinary upload failed: HTTP $httpCode - $response - $curlError");
-        return ['success' => false, 'path' => null, 'error' => "Cloudinary upload failed: HTTP $httpCode"];
+        $msg = $httpCode ? "Cloudinary upload failed: HTTP $httpCode" : 'Cloudinary upload failed';
+        return ['success' => false, 'path' => null, 'error' => $msg];
     }
 }
 

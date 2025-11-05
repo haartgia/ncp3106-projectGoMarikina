@@ -10,7 +10,7 @@ $port = 10272;
 // processes). Instead we log the error and show a friendly message.
 mysqli_report(MYSQLI_REPORT_OFF);
 try {
-    $conn = new mysqli($host, $user, $pass, $db);
+    $conn = new mysqli($host, $user, $pass, $db, $port);
     if ($conn->connect_error) {
         // handle non-exceptional connection errors
         error_log('DB connect error: ' . $conn->connect_error);

@@ -1,9 +1,10 @@
 <?php
-$host = "db.fr-pari1.bengt.wasmernet.com";
-$user = "b01d5d797c138000d457051efd42";  // remote DB user
-$pass = "0690b01d-5d79-7d56-8000-6f533dffeec9";
-$db   = "user_db";
-$port = 10272; // your MySQL port
+// Centralized DB configuration (override via environment when available)
+$host = getenv('DB_HOST') ?: "db.fr-pari1.bengt.wasmernet.com";
+$user = getenv('DB_USER') ?: "b01d5d797c138000d457051efd42";  // remote DB user
+$pass = getenv('DB_PASS') ?: "0690b01d-5d79-7d56-8000-6f533dffeec9";
+$db   = getenv('DB_NAME') ?: "user_db";
+$port = (int)(getenv('DB_PORT') ?: 10272); // your MySQL port
 
 // Establish MySQLi connection. Wrap in try/catch so an unavailable MySQL server
 // doesn't produce an uncaught exception (which previously crashed Apache child
@@ -30,11 +31,8 @@ try {
  * Returns a mysqli connection object
  */
 function get_db_connection() {
-    $host = "localhost";
-    $user = "root";
-    $pass = "";
-    $db   = "user_db";
-    $port = 3306; // default local port
+    // Reuse the same configuration used for the global connection
+    global $host, $user, $pass, $db, $port;
 
     mysqli_report(MYSQLI_REPORT_OFF);
     try {

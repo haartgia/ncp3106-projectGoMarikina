@@ -44,7 +44,8 @@ $barangay = $data['barangay'] ?? '';
 $temperature = $data['temperature'] ?? null;
 $humidity = $data['humidity'] ?? null;
 $water_percent = $data['waterPercent'] ?? $data['water_percent'] ?? 0;
-$flood_level = $data['floodLevel'] ?? $data['flood_level'] ?? 'No Flood';
+$water_percent = (int)max(0, min(100, (int)$water_percent));
+$flood_level = $data['floodLevel'] ?? $data['flood_level'] ?? '';
 $air_quality = $data['airQuality'] ?? $data['air_quality'] ?? null;
 $gas_analog = $data['gasAnalog'] ?? $data['gas_analog'] ?? null;
 $gas_voltage = $data['gasVoltage'] ?? $data['gas_voltage'] ?? null;
@@ -52,6 +53,19 @@ $device_ip = $data['device_ip'] ?? $data['deviceIp'] ?? null;
 $status = $data['status'] ?? 'online';
 $source = $data['source'] ?? 'esp32';
 $reading_timestamp = $data['timestamp'] ?? $data['reading_timestamp'] ?? date('Y-m-d H:i:s');
+
+// Derive a consistent flood_level string if not provided
+if ($flood_level === '' || $flood_level === null) {
+    if ($water_percent >= 100) {
+        $flood_level = 'Level 3 (Waist Deep)';
+    } elseif ($water_percent >= 66) {
+        $flood_level = 'Level 2 (Knee Deep)';
+    } elseif ($water_percent >= 33) {
+        $flood_level = 'Level 1 (Gutter Deep)';
+    } else {
+        $flood_level = 'No Flood';
+    }
+}
 
 // Validate barangay
 if (empty($barangay)) {

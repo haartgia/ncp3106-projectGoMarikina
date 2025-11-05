@@ -44,7 +44,7 @@ if ($brgyKey === 'malanday') {
 function fetchLatestFromDb($barangay) {
     try {
         $db = get_db_connection();
-        $stmt = $db->prepare("SELECT id, barangay, device_ip, temperature, humidity, water_percent, flood_level, air_quality, gas_analog, gas_voltage, status, source, reading_timestamp FROM sensor_data WHERE barangay = ? ORDER BY reading_timestamp DESC LIMIT 1");
+    $stmt = $db->prepare("SELECT id, barangay, device_ip, temperature, humidity, water_percent, flood_level, air_quality, gas_analog, gas_voltage, status, source, reading_timestamp, created_at FROM sensor_data WHERE barangay = ? ORDER BY reading_timestamp DESC, created_at DESC, id DESC LIMIT 1");
         $stmt->bind_param('s', $barangay);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -52,6 +52,7 @@ function fetchLatestFromDb($barangay) {
         $stmt->close();
         $db->close();
         if (!$row) return null;
+        $wp = isset($row['water_percent']) ? max(0, min(100, (int)$row['water_percent'])) : null;
         return [
             'barangay'      => $row['barangay'],
             'timestamp'     => $row['reading_timestamp'],
@@ -60,7 +61,7 @@ function fetchLatestFromDb($barangay) {
             'device_ip'     => $row['device_ip'] ?: null,
             'temperature'   => isset($row['temperature']) ? (float)$row['temperature'] : null,
             'humidity'      => isset($row['humidity']) ? (float)$row['humidity'] : null,
-            'waterPercent'  => isset($row['water_percent']) ? (int)$row['water_percent'] : null,
+            'waterPercent'  => $wp,
             'floodLevel'    => $row['flood_level'] ?: 'Unknown',
             'airQuality'    => isset($row['air_quality']) ? (int)$row['air_quality'] : null,
             'gasAnalog'     => isset($row['gas_analog']) ? (int)$row['gas_analog'] : null,

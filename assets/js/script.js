@@ -542,7 +542,13 @@ document.addEventListener('DOMContentLoaded', () => {
     saveStore(s);
   }
 
-  function computeWaterAlertLevel(v){ if (!Number.isFinite(v) || v <= 0) return { level: 0 }; if (v === 100) return { level: 1 }; if (v <= 33) return { level: 1 }; if (v <= 66) return { level: 2 }; return { level: 3 }; }
+  function computeWaterAlertLevel(v){
+    v = Number(v);
+    if (!Number.isFinite(v) || v <= 0) return { level: 0 };
+    if (v <= 33) return { level: 1 };   // Gutter deep
+    if (v <= 66) return { level: 2 };   // Knee deep
+    return { level: 3 };                // Waist deep (67–100)
+  }
 
   function dispatchUpdate(payload){
     const ev = new CustomEvent('gomk:data', { detail: payload });

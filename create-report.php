@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 ?>
 
 <!DOCTYPE html>
@@ -9,6 +9,11 @@ require __DIR__ . '/config/auth.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Report - GO! MARIKINA</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <!-- Leaflet CSS (loaded only on create-report page where map picker is used) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css">
 </head>
 <body>
     <div class="dashboard-layout">
@@ -19,11 +24,9 @@ require __DIR__ . '/config/auth.php';
         <div class="mobile-nav-scrim" data-nav-scrim hidden></div>
 
         <!-- Main Content -->
-        <main class="dashboard-main">
-            <header class="auth-header" aria-label="Go Marikina branding">
-                <img src="./uploads/go_marikina_logo.png" alt="Go Marikina" class="auth-logo">
-                <h1 class="auth-section-title">CREATE A REPORT</h1>
-                <span class="auth-header-spacer" aria-hidden="true"></span>
+        <main class="dashboard-main create-report-main">
+            <header class="auth-header auth-header--centered" aria-label="Go Marikina branding">
+                <img src="./uploads/blue_smallgomarikina.png" alt="Go Marikina" class="auth-centered-logo" />
             </header>
             
             <?php
@@ -36,7 +39,7 @@ require __DIR__ . '/config/auth.php';
             <div id="createReportContent">
                 <div class="create-report-container">
 
-                    <form class="create-report-form" id="createReportForm" enctype="multipart/form-data">
+                    <form class="create-report-form" id="createReportForm" method="post" action="api/reports_create.php" enctype="multipart/form-data">
                     <!-- Photo Upload Section -->
                     <div class="photo-upload-section">
                         <div class="photo-upload-area" id="photoUploadArea">
@@ -48,14 +51,12 @@ require __DIR__ . '/config/auth.php';
                             </div>
                             <div class="upload-text">Upload Photo</div>
                             <div class="upload-hint">Click or drag to upload</div>
+                            
                             <img class="photo-preview" id="photoPreview" alt="Preview">
+                            <button type="button" class="photo-delete" id="photoDelete" aria-label="Remove photo" title="Remove photo">×</button>
                         </div>
                         <input type="file" id="photoInput" name="photo" accept="image/*" style="display: none;">
                         
-                        <div class="form-buttons">
-                            <button type="button" class="btn-cancel" id="clearFormBtn">CANCEL</button>
-                            <button type="submit" class="btn-upload">UPLOAD</button>
-                        </div>
                     </div>
 
                     <!-- Details Section -->
@@ -77,13 +78,19 @@ require __DIR__ . '/config/auth.php';
                         </div>
 
                         <div class="form-field">
-                            <label class="form-label" for="title">TITLE</label>
-                            <input type="text" id="title" name="title" class="form-input" placeholder="Enter a title for your concern..." required>
+                            <div class="form-field-header">
+                                <label class="form-label" for="title">TITLE</label>
+                                <small class="char-counter"><span id="title-count">0</span>/50</small>
+                            </div>
+                            <input type="text" id="title" name="title" class="form-input" placeholder="Enter a title for your concern..." maxlength="50" required>
                         </div>
 
                         <div class="form-field">
-                            <label class="form-label" for="description">DESCRIPTION</label>
-                            <textarea id="description" name="description" class="form-input form-textarea" placeholder="Describe your concern..." required></textarea>
+                            <div class="form-field-header">
+                                <label class="form-label" for="description">DESCRIPTION</label>
+                                <small class="char-counter"><span id="description-count">0</span>/300</small>
+                            </div>
+                            <textarea id="description" name="description" class="form-input form-textarea" placeholder="Describe your concern..." maxlength="300" required></textarea>
                         </div>
 
                         <div class="form-field">
@@ -96,6 +103,15 @@ require __DIR__ . '/config/auth.php';
                                 </svg>
                             </div>
                         </div>
+                        <!-- Hidden fields to store coordinates when a place is chosen -->
+                        <input type="hidden" id="location_lat" name="location_lat" value="">
+                        <input type="hidden" id="location_lng" name="location_lng" value="">
+                    </div>
+                    
+                    <!-- Form Actions: span full width below both columns -->
+                    <div class="form-buttons">
+                        <button type="button" class="btn-cancel" id="clearFormBtn">CANCEL</button>
+                        <button type="submit" class="btn-upload">SUBMIT REPORT</button>
                     </div>
                 </form>
             </div>
@@ -119,8 +135,14 @@ require __DIR__ . '/config/auth.php';
                 </div>
                 <div class="crop-controls">
                     <div class="crop-info">
-                        <span>Drag to reposition the crop area</span>
-                        <span class="aspect-ratio">8:4 Aspect Ratio (Fixed)</span>
+                        <span>Drag to move; drag edges/corners to resize</span>
+                    </div>
+                    <div class="crop-mode">
+                        <label class="crop-mode-label">Orientation:</label>
+                        <div class="crop-mode-options">
+                            <button type="button" class="crop-mode-btn" id="cropModePortrait" aria-pressed="false">Portrait</button>
+                            <button type="button" class="crop-mode-btn" id="cropModeLandscape" aria-pressed="false">Landscape</button>
+                        </div>
                     </div>
                     <div class="crop-buttons">
                         <button type="button" class="btn-cancel" id="cropCancel">Cancel</button>
@@ -132,6 +154,41 @@ require __DIR__ . '/config/auth.php';
     </div>
             </div>
 
+        <!-- Map Picker Modal -->
+        <div id="mapModal" class="modal" aria-hidden="true">
+            <div class="modal-content map-modal-content" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <h2>Pick location</h2>
+                    <button type="button" class="modal-close" id="mapModalClose" aria-label="Close">×</button>
+                </div>
+                            <div class="modal-body">
+                        <div class="map-picker-wrap">
+                            <!-- Search input for Nominatim/LocationIQ autocomplete -->
+                            <input type="search" id="leafletPlaceInput" class="form-input" placeholder="Search for a place or address..." />
+                            <!-- Leaflet map container -->
+                            <div id="reportMap" class="report-map" style="height:420px;"></div>
+                        <div id="infowindow-content" class="visually-hidden">
+                            <span id="place-name" data-key="place-name"></span>
+                            <span id="place-address" data-key="place-address"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <!-- 'Use strict bounds' removed per UI request -->
+                    </div>
+                    <div class="map-footer-actions">
+                        <button type="button" id="mapClearSelection" class="btn-map-clear">CLEAR</button>
+                        <button type="button" id="mapUsePlace" class="btn-map-use">USE THIS PLACE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Leaflet JS (must load before the app script that uses it) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- MarkerCluster plugin -->
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
     <script src="assets/js/script.js" defer></script>
 </body>
 </html>

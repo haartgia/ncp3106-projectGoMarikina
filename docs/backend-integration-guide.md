@@ -17,7 +17,20 @@ All interactive components already expose unique IDs / `data-*` attributes to ma
 
 ## Authentication contract
 
-### Suggested endpoints 
+### Implemented endpoints (local PHP)
+
+These endpoints are available in this repo for local usage under XAMPP:
+
+| Purpose | Method & URL | Payload / Params | Response |
+|---------|--------------|------------------|----------|
+| Submit new report | `POST /api/reports_create.php` | `multipart/form-data` with fields `photo` (optional), `category`, `title`, `description`, `location` | `200 OK` JSON `{ success, message, report }`; `422` on validation errors |
+| List reports | `GET /api/reports_list.php?status=unresolved&category=public_safety&mine=true` | Query params optional; `mine=true` requires session login | `200 OK` JSON `{ success, data: [...] }` |
+
+Notes:
+- The create endpoint also appends the created report into `$_SESSION['reports']` so existing pages render it immediately while the DB-backed listing is being adopted.
+- Uploads are stored under `uploads/reports/` with randomized filenames; max size 5MB; accepts JPG/PNG/WEBP.
+
+### Suggested endpoints (for production backends)
 
 | Purpose | Method & URL | Expected request | Response (happy path) |
 |---------|--------------|------------------|------------------------|
@@ -67,7 +80,7 @@ All interactive components already expose unique IDs / `data-*` attributes to ma
 ### Front-end hook points
 
 * `create-report.php` renders `<form id="createReportForm" ...>`.
-  * `assets/js/script.js` performs client-side validation and currently shows an alert. Replace the `alert` block with a `fetch('/api/reports', { method: 'POST', body: formData })` call. The form already uses `enctype="multipart/form-data"` and gives consistent field names.
+   * `assets/js/script.js` performs client-side validation and now posts via `fetch('api/reports_create.php', { method: 'POST', body: formData })`. The form uses `enctype="multipart/form-data"` and consistent field names.
   * Uploaded photo preview uses the native `<input type="file" name="photo">`, so the backend just needs to accept the `photo` field.
 * Dashboard/Profile templates expect an array named `$reports`. Replace the session mock data initialization inside `config/auth.php` with API fetches (or render-time includes).
 * Admin table has a `<select class="admin-select">`. Each form already posts with hidden `report_id` and desired `status`, so these map 1:1 to the `PATCH` endpoint.

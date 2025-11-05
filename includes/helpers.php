@@ -83,3 +83,146 @@ if (!function_exists('status_chip_modifier')) {
     }
 }
 
+if (!function_exists('category_label')) {
+    /**
+     * Convert stored category slugs like "public_safety" or "road-hazard"
+     * into a human-friendly label: "Public Safety", "Road Hazard".
+     */
+    function category_label(?string $category): string
+    {
+        if ($category === null) {
+            return 'Report';
+        }
+
+        $raw = trim((string)$category);
+        if ($raw === '') {
+            return 'Report';
+        }
+
+        // Normalize to slug-style key
+        $key = strtolower($raw);
+        $key = str_replace([' ', '-'], '_', $key);
+        $key = preg_replace('/_+/', '_', $key);
+
+        // Explicit mappings (authoritative display names)
+        $map = [
+            'public_safety'     => 'Public Safety & Infrastructure',
+            'cleanliness'       => 'Cleanliness & Environment',
+            'public_facilities' => 'Public Facilities',
+            'community'         => 'Community',
+            'other'             => 'Other Concerns',
+        ];
+
+        if (array_key_exists($key, $map)) {
+            return $map[$key];
+        }
+
+        // Fallback: make a best-effort pretty label
+        $s = str_replace(['_', '-'], ' ', $raw);
+        $s = preg_replace('/\s+/', ' ', $s);
+        if (function_exists('mb_convert_case')) {
+            return mb_convert_case($s, MB_CASE_TITLE, 'UTF-8');
+        }
+        return ucwords(strtolower($s));
+    }
+}
+
+if (!function_exists('user_initials')) {
+    /**
+     * Return initials from a user array or provided name components.
+     * Looks for common keys: first_name/last_name or name/full_name.
+     */
+    function user_initials(?array $user = null, ?string $fallback = 'User'): string
+    {
+        $first = '';
+        $last = '';
+        $display = '';
+
+        if (is_array($user)) {
+            $first = trim((string)($user['first_name'] ?? $user['firstName'] ?? ''));
+            $last  = trim((string)($user['last_name'] ?? $user['lastName'] ?? ''));
+            $display = trim((string)($user['name'] ?? $user['full_name'] ?? ''));
+        }
+
+        if ($first !== '' || $last !== '') {
+            $a = $first !== '' ? mb_substr($first, 0, 1, 'UTF-8') : '';
+            $b = $last !== '' ? mb_substr($last, 0, 1, 'UTF-8') : '';
+            return strtoupper($a . $b);
+        }
+
+        if ($display !== '') {
+            // Take first and last word initials
+            $parts = preg_split('/\s+/', $display);
+            if ($parts && count($parts) > 0) {
+                $firstCh = mb_substr($parts[0], 0, 1, 'UTF-8');
+                $lastCh = mb_substr($parts[count($parts)-1], 0, 1, 'UTF-8');
+                return strtoupper($firstCh . $lastCh);
+            }
+        }
+
+        return (string)$fallback;
+    }
+}
+
+if (!function_exists('summarize_location')) {
+    /**
+     * Produce a short, human-friendly summary for long location strings.
+     * Strategy:
+     *  - Split on commas and keep the first N components (default 2 for tighter cards).
+     *  - Trim and join with commas. If the result is still longer than
+     *    $maxLen, truncate with an ellipsis.
+     *  - If the original had more components than kept, append an ellipsis.
+     */
+    function summarize_location(?string $location, int $parts = 2, int $maxLen = 40): string
+    {
+        $location = trim((string)$location);
+        if ($location === '') {
+            return '';
+        }
+
+        $chunks = array_filter(array_map('trim', explode(',', $location)), fn($v) => $v !== '');
+        if (count($chunks) === 0) {
+            return $location;
+        }
+
+        $keep = array_slice($chunks, 0, max(1, $parts));
+        $out = implode(', ', $keep);
+
+        // Use multibyte-safe functions when available
+        $len = function_exists('mb_strlen') ? mb_strlen($out, 'UTF-8') : strlen($out);
+        if ($len > $maxLen) {
+            $out = (function_exists('mb_substr') ? mb_substr($out, 0, $maxLen - 1, 'UTF-8') : substr($out, 0, $maxLen - 1)) . '…';
+        } elseif (count($chunks) > count($keep)) {
+            $out .= '…';
+        }
+
+        return $out;
+    }
+}
+
+if (!function_exists('truncate_text')) {
+    /**
+     * Truncate a string to a maximum length and append ellipsis.
+     * Uses multibyte-safe functions when available.
+     *
+     * Examples:
+     *  truncate_text('Hello world', 5) => 'Hello...'
+     *  truncate_text('Short', 25) => 'Short'
+     */
+    function truncate_text(?string $value, int $limit = 25, string $ellipsis = '...'): string
+    {
+        $s = trim((string)$value);
+        if ($s === '') {
+            return '';
+        }
+
+        $len = function_exists('mb_strlen') ? mb_strlen($s, 'UTF-8') : strlen($s);
+        if ($len <= $limit) {
+            return $s;
+        }
+
+        $slice = function_exists('mb_substr') ? mb_substr($s, 0, $limit, 'UTF-8') : substr($s, 0, $limit);
+        return rtrim($slice) . $ellipsis;
+    }
+}
+

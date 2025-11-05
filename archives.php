@@ -79,6 +79,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: archives.php');
         exit;
+    } elseif ($action === 'delete_archived_report') {
+        $reportId = (int) ($_POST['report_id'] ?? 0);
+
+        if ($reportId) {
+            try {
+                $check = $conn->query("SHOW TABLES LIKE 'reports_archive'");
+                if ($check && $check->num_rows > 0) {
+                    // Attempt to delete associated image file first
+                    try {
+                        $stmtImg = $conn->prepare('SELECT image_path FROM reports_archive WHERE id = ?');
+                        if ($stmtImg) {
+                            $stmtImg->bind_param('i', $reportId);
+                            $stmtImg->execute();
+                            $res = $stmtImg->get_result();
+                            if ($row = $res->fetch_assoc()) {
+                                $img = $row['image_path'] ?? null;
+                                if ($img) {
+                                    $abs = __DIR__ . '/' . ltrim($img, '/');
+                                    if (@is_file($abs)) { @unlink($abs); }
+                                }
+                            }
+                            $stmtImg->close();
+                        }
+                    } catch (Throwable $ie) { /* ignore file delete errors */ }
+
+                    // Delete row from archive
+                    $stmt = $conn->prepare('DELETE FROM reports_archive WHERE id = ?');
+                    if ($stmt) {
+                        $stmt->bind_param('i', $reportId);
+                        $stmt->execute();
+                        $stmt->close();
+                        $_SESSION['archive_feedback'] = 'Archived report permanently deleted.';
+                    } else {
+                        $_SESSION['archive_feedback'] = 'Failed to prepare delete statement: ' . $conn->error;
+                    }
+                } else {
+                    $_SESSION['archive_feedback'] = 'Archive table not found.';
+                }
+            } catch (Throwable $e) {
+                $_SESSION['archive_feedback'] = 'Failed to permanently delete report: ' . $e->getMessage();
+            }
+        }
+        header('Location: archives.php');
+        exit;
+    } elseif ($action === 'delete_archived_announcement') {
+        $announcementId = (int) ($_POST['announcement_id'] ?? 0);
+
+        if ($announcementId) {
+            try {
+                $check = $conn->query("SHOW TABLES LIKE 'announcements_archive'");
+                if ($check && $check->num_rows > 0) {
+                    // Attempt to delete associated image file first
+                    try {
+                        $stmtImg = $conn->prepare('SELECT image_path FROM announcements_archive WHERE id = ?');
+                        if ($stmtImg) {
+                            $stmtImg->bind_param('i', $announcementId);
+                            $stmtImg->execute();
+                            $res = $stmtImg->get_result();
+                            if ($row = $res->fetch_assoc()) {
+                                $img = $row['image_path'] ?? null;
+                                if ($img) {
+                                    $abs = __DIR__ . '/' . ltrim($img, '/');
+                                    if (@is_file($abs)) { @unlink($abs); }
+                                }
+                            }
+                            $stmtImg->close();
+                        }
+                    } catch (Throwable $ie) { /* ignore file delete errors */ }
+
+                    // Delete row from archive
+                    $stmt = $conn->prepare('DELETE FROM announcements_archive WHERE id = ?');
+                    if ($stmt) {
+                        $stmt->bind_param('i', $announcementId);
+                        $stmt->execute();
+                        $stmt->close();
+                        $_SESSION['archive_feedback'] = 'Archived announcement permanently deleted.';
+                    } else {
+                        $_SESSION['archive_feedback'] = 'Failed to prepare delete statement: ' . $conn->error;
+                    }
+                } else {
+                    $_SESSION['archive_feedback'] = 'Archive table not found.';
+                }
+            } catch (Throwable $e) {
+                $_SESSION['archive_feedback'] = 'Failed to permanently delete announcement: ' . $e->getMessage();
+            }
+        }
+        header('Location: archives.php');
+        exit;
     }
 }
 
@@ -319,11 +407,11 @@ $totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
                                                 <td data-title="Actions">
                                                     <div style="display:flex;gap:8px;align-items:center;">
                                                         <button type="button" class="archive-view-btn" data-report='<?php echo htmlspecialchars(json_encode($report), ENT_QUOTES, "UTF-8"); ?>' title="View details">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        </button>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                                                        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                        <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                </button>
                                                         <form method="post" style="display:inline;">
                                                             <input type="hidden" name="action" value="restore_report">
                                                             <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
@@ -334,6 +422,19 @@ $totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
                                                                 </svg>
                                                             </button>
                                                         </form>
+                                                                <form method="post" style="display:inline;" data-confirm-message="Permanently delete this archived report? This cannot be undone.">
+                                                                    <input type="hidden" name="action" value="delete_archived_report">
+                                                                    <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
+                                                                    <button type="submit" class="archive-delete-btn" title="Delete permanently" aria-label="Delete permanently">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                                                                            <path d="M3 6h18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                                                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                                                            <path d="M10 11v6M14 11v6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                                                        </svg>
+                                                                        <span class="visually-hidden">Delete</span>
+                                                                    </button>
+                                                                </form>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -381,13 +482,12 @@ $totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
                                                 </time>
                                             </div>
                                         </header>
-                                        <?php if (!empty($announcement['image'])): ?>
-                                            <figure class="archived-announcement-media">
-                                                <img src="<?php echo htmlspecialchars($announcement['image'], ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars(($announcement['title'] ?? '') . ' image', ENT_QUOTES, 'UTF-8'); ?>">
-                                            </figure>
-                                        <?php endif; ?>
                                         <div class="archived-announcement-body">
-                                            <?php echo nl2br(htmlspecialchars($announcement['body'], ENT_QUOTES, 'UTF-8')); ?>
+                                            <?php 
+                                                // Show only the first 150 characters in the card list
+                                                $summary = truncate_text($announcement['body'] ?? '', 150, '…');
+                                                echo htmlspecialchars($summary, ENT_QUOTES, 'UTF-8');
+                                            ?>
                                         </div>
                                         <footer class="archived-announcement-footer">
                                             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -398,6 +498,11 @@ $totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
                                                     <input type="hidden" name="action" value="restore_announcement">
                                                     <input type="hidden" name="announcement_id" value="<?php echo (int)$announcement['id']; ?>">
                                                     <button type="submit" class="archive-restore-btn" title="Restore announcement">Restore</button>
+                                                </form>
+                                                <form method="post" style="display:inline;" data-confirm-message="Permanently delete this archived announcement? This cannot be undone.">
+                                                    <input type="hidden" name="action" value="delete_archived_announcement">
+                                                    <input type="hidden" name="announcement_id" value="<?php echo (int)$announcement['id']; ?>">
+                                                    <button type="submit" class="archive-delete-btn" title="Delete permanently">Delete</button>
                                                 </form>
                                             </div>
                                         </footer>

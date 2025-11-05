@@ -145,7 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['announcement_feedback'] = 'Please complete both the title and message fields before publishing.';
         }
-    } elseif ($action === 'delete_announcement') {
+    } elseif ($action === 'delete_announcement' || $action === 'archive_announcement') {
+        $isArchiveRequest = ($action === 'archive_announcement');
         $announcementId = (int) ($_POST['announcement_id'] ?? 0);
 
         if ($announcementId) {
@@ -192,9 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         static fn($announcement) => (int) ($announcement['id'] ?? 0) !== $announcementId
                     ));
                 }
-                $_SESSION['announcement_feedback'] = 'Announcement removed.';
+                $_SESSION['announcement_feedback'] = $isArchiveRequest ? 'Announcement archived.' : 'Announcement removed.';
             } catch (Throwable $e) {
-                $_SESSION['announcement_feedback'] = 'Failed to remove announcement.';
+                $_SESSION['announcement_feedback'] = $isArchiveRequest ? 'Failed to archive announcement.' : 'Failed to remove announcement.';
             }
         }
     }
@@ -360,10 +361,10 @@ try {
                                         <?php echo htmlspecialchars($announcement['body'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
                                     </div>
                                     <footer class="announcement-card__footer">
-                                        <form method="post" class="announcement-delete-form" data-confirm-message="Remove this announcement?">
-                                            <input type="hidden" name="action" value="delete_announcement">
+                                        <form method="post" class="announcement-delete-form" data-confirm-message="Archive this announcement?">
+                                            <input type="hidden" name="action" value="archive_announcement">
                                             <input type="hidden" name="announcement_id" value="<?php echo (int) $announcement['id']; ?>">
-                                            <button type="submit" class="announcement-delete">Delete</button>
+                                            <button type="submit" class="announcement-delete">Archive</button>
                                         </form>
                                     </footer>
                                 </li>

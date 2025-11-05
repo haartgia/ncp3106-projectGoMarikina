@@ -191,8 +191,8 @@ $inProgressRate = $totalReports > 0 ? (int)round(($statusCounts['in_progress'] /
                         <?php endif; ?>
                     </p>
                     <div class="admin-hero-chip-group">
-                        <span class="admin-hero-chip" aria-label="Open report percentage"><?php echo $openRate; ?>% open</span>
-                        <span class="admin-hero-chip admin-hero-chip--accent" aria-label="Resolved report percentage"><?php echo $resolvedRate; ?>% resolved</span>
+                        <span class="admin-hero-chip" aria-label="Open report percentage" data-snap-open-chip><?php echo $openRate; ?>% open</span>
+                        <span class="admin-hero-chip admin-hero-chip--accent" aria-label="Resolved report percentage" data-snap-solved-chip><?php echo $resolvedRate; ?>% resolved</span>
                     </div>
                 </div>
             </header>
@@ -212,32 +212,32 @@ $inProgressRate = $totalReports > 0 ? (int)round(($statusCounts['in_progress'] /
                 <div class="admin-summary-grid">
                     <article class="admin-summary-card admin-summary-card--total">
                         <span class="admin-summary-label">Total reports</span>
-                        <h3 class="admin-summary-value"><?php echo $totalReports; ?></h3>
+                        <h3 class="admin-summary-value" data-snap-total><?php echo $totalReports; ?></h3>
                         <p class="admin-summary-note">Across every category logged in the system.</p>
                     </article>
                     <article class="admin-summary-card admin-summary-card--open">
                         <span class="admin-summary-label">Awaiting triage</span>
-                        <h3 class="admin-summary-value"><?php echo $statusCounts['unresolved']; ?></h3>
+                        <h3 class="admin-summary-value" data-snap-open><?php echo $statusCounts['unresolved']; ?></h3>
                         <div class="admin-summary-meter" role="presentation">
-                            <span class="admin-summary-meter-fill" style="width: <?php echo $openRate; ?>%;"></span>
+                            <span class="admin-summary-meter-fill" data-snap-open-meter style="width: <?php echo $openRate; ?>%;"></span>
                         </div>
-                        <p class="admin-summary-note"><?php echo $openRate; ?>% of all requests are still unresolved.</p>
+                        <p class="admin-summary-note" data-snap-open-note><?php echo $openRate; ?>% of all requests are still unresolved.</p>
                     </article>
                     <article class="admin-summary-card admin-summary-card--progress">
                         <span class="admin-summary-label">In progress</span>
-                        <h3 class="admin-summary-value"><?php echo $statusCounts['in_progress']; ?></h3>
+                        <h3 class="admin-summary-value" data-snap-progress><?php echo $statusCounts['in_progress']; ?></h3>
                         <div class="admin-summary-meter" role="presentation">
-                            <span class="admin-summary-meter-fill" style="width: <?php echo $inProgressRate; ?>%;"></span>
+                            <span class="admin-summary-meter-fill" data-snap-progress-meter style="width: <?php echo $inProgressRate; ?>%;"></span>
                         </div>
-                        <p class="admin-summary-note"><?php echo $inProgressRate; ?>% have teams presently dispatched.</p>
+                        <p class="admin-summary-note" data-snap-progress-note><?php echo $inProgressRate; ?>% have teams presently dispatched.</p>
                     </article>
                     <article class="admin-summary-card admin-summary-card--resolved">
                         <span class="admin-summary-label">Resolved</span>
-                        <h3 class="admin-summary-value"><?php echo $statusCounts['solved']; ?></h3>
+                        <h3 class="admin-summary-value" data-snap-solved><?php echo $statusCounts['solved']; ?></h3>
                         <div class="admin-summary-meter" role="presentation">
-                            <span class="admin-summary-meter-fill" style="width: <?php echo $resolvedRate; ?>%;"></span>
+                            <span class="admin-summary-meter-fill" data-snap-solved-meter style="width: <?php echo $resolvedRate; ?>%;"></span>
                         </div>
-                        <p class="admin-summary-note">Resolution rate holding at <?php echo $resolvedRate; ?>%.</p>
+                        <p class="admin-summary-note" data-snap-solved-note>Resolution rate holding at <?php echo $resolvedRate; ?>%.</p>
                     </article>
                 </div>
             </section>
@@ -318,7 +318,7 @@ $inProgressRate = $totalReports > 0 ? (int)round(($statusCounts['in_progress'] /
                                                 <input type="hidden" name="report_id" value="<?php echo (int) $report['id']; ?>">
                                                 <label class="admin-select-wrapper">
                                                     <span class="visually-hidden">Select status</span>
-                                                    <select name="status" class="admin-select">
+                                                    <select name="status" class="admin-select status-<?php echo htmlspecialchars($report['status'] ?? 'unresolved', ENT_QUOTES, 'UTF-8'); ?>">
                                                         <option value="unresolved"<?php if ($report['status'] === 'unresolved') echo ' selected'; ?>>Unresolved</option>
                                                         <option value="in_progress"<?php if ($report['status'] === 'in_progress') echo ' selected'; ?>>In Progress</option>
                                                         <option value="solved"<?php if ($report['status'] === 'solved') echo ' selected'; ?>>Solved</option>

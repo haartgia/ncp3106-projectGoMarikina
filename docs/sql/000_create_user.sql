@@ -8,5 +8,5 @@ CREATE TABLE users (
     last_name VARCHAR(50),
     email VARCHAR(100) UNIQUE,
     password VARCHAR(255),
-    mobile VARCHAR(20)
+    mobile VARCHAR(20) UNIQUE
 );

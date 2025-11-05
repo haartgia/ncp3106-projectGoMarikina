@@ -60,14 +60,10 @@ if (isset($_POST['location_lng']) && $_POST['location_lng'] !== '') {
     }
 }
 
-// Optional photo upload
-$imagePath = null;
-$uploadDir = __DIR__ . '/../uploads/reports';
-$publicBase = 'uploads/reports';
+// Optional photo upload using storage helper
+require_once __DIR__ . '/../includes/storage_helper.php';
 
-if (!is_dir($uploadDir)) {
-    @mkdir($uploadDir, 0775, true);
-}
+$imagePath = null;
 
 // Only validate/process if user actually attempted an upload
 if (isset($_FILES['photo'])) {
@@ -78,28 +74,11 @@ if (isset($_FILES['photo'])) {
     } else {
         // If tmp_name exists and is uploaded, process normally
         if (!empty($file['tmp_name']) && is_uploaded_file($file['tmp_name'])) {
-            if ($file['error'] !== UPLOAD_ERR_OK) {
-                $errors[] = 'Photo upload failed';
+            $result = store_image($file, 'reports');
+            if (!$result['success']) {
+                $errors[] = $result['error'];
             } else {
-                $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-                $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                $mime = finfo_file($finfo, $file['tmp_name']);
-                finfo_close($finfo);
-
-                if (!isset($allowed[$mime])) {
-                    $errors[] = 'Unsupported image type. Please upload JPG, PNG, or WEBP.';
-                } else if ($file['size'] > 5 * 1024 * 1024) { // 5MB
-                    $errors[] = 'Image is too large (max 5MB).';
-                } else {
-                    $ext = $allowed[$mime];
-                    $basename = bin2hex(random_bytes(8)) . '.' . $ext;
-                    $target = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $basename;
-                    if (!move_uploaded_file($file['tmp_name'], $target)) {
-                        $errors[] = 'Failed to store uploaded image.';
-                    } else {
-                        $imagePath = $publicBase . '/' . $basename;
-                    }
-                }
+                $imagePath = $result['path'];
             }
         } else {
             // If tmp_name not present but error not NO_FILE, treat as upload failure

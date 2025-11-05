@@ -1,6 +1,15 @@
 <?php
 // Harden session cookie settings before starting the session
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Ensure sessions are stored in a stable, writable path (helps on hosts where default /tmp isn't shared/persistent)
+    $defaultPath = __DIR__ . '/../tmp_sessions';
+    $savePath = $defaultPath;
+    try {
+        if (!is_dir($defaultPath)) { @mkdir($defaultPath, 0777, true); }
+        if (!is_writable($defaultPath)) { $savePath = sys_get_temp_dir(); }
+    } catch (Throwable $e) { $savePath = sys_get_temp_dir(); }
+    if (is_string($savePath) && $savePath !== '') { @session_save_path($savePath); }
+
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
     // Ensure cookies work across the whole site and are HTTP-only
     // SameSite=Lax allows POST->redirect flows to carry the cookie
@@ -17,6 +26,14 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     // Use a custom session name to avoid conflicts with other PHP apps on the same host
     if (function_exists('session_name')) {
         @session_name('GOMKSESSID');
+    }
+    // Strengthen session behavior
+    if (function_exists('ini_set')) {
+        @ini_set('session.use_strict_mode', '1');
+        @ini_set('session.use_only_cookies', '1');
+        @ini_set('session.cookie_httponly', '1');
+        // Allow Lax cookie for top-level POST redirects; upgrade to Strict if app is fully same-site navigations
+        @ini_set('session.cookie_samesite', 'Lax');
     }
     session_start();
 }

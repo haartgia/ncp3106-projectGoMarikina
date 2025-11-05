@@ -23,6 +23,8 @@ $default_ip = '172.20.10.3'; // ESP32 for Malanday
 $barangay = $_GET['barangay'] ?? '';
 $esp32_ip_override = $_GET['ip'] ?? null; // optional override for testing
 $debug = isset($_GET['debug']);
+// Optional mode switch: mode=db forces serving latest reading from database (for cloud-hosted site)
+$mode = $_GET['mode'] ?? '';
 
 $normalize = function(string $s) {
     $s = trim($s);
@@ -36,6 +38,38 @@ $brgyKey = $normalize($barangay);
 $device_ip = null;
 if ($brgyKey === 'malanday') {
     $device_ip = $esp32_ip_override ?: $default_ip;
+}
+
+// Helper: Fetch the latest stored reading from DB
+function fetchLatestFromDb($barangay) {
+    try {
+        $db = get_db_connection();
+        $stmt = $db->prepare("SELECT id, barangay, device_ip, temperature, humidity, water_percent, flood_level, air_quality, gas_analog, gas_voltage, status, source, reading_timestamp FROM sensor_data WHERE barangay = ? ORDER BY reading_timestamp DESC LIMIT 1");
+        $stmt->bind_param('s', $barangay);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res ? $res->fetch_assoc() : null;
+        $stmt->close();
+        $db->close();
+        if (!$row) return null;
+        return [
+            'barangay'      => $row['barangay'],
+            'timestamp'     => $row['reading_timestamp'],
+            'status'        => $row['status'] ?: 'online',
+            'source'        => $row['source'] ?: 'esp32',
+            'device_ip'     => $row['device_ip'] ?: null,
+            'temperature'   => isset($row['temperature']) ? (float)$row['temperature'] : null,
+            'humidity'      => isset($row['humidity']) ? (float)$row['humidity'] : null,
+            'waterPercent'  => isset($row['water_percent']) ? (int)$row['water_percent'] : null,
+            'floodLevel'    => $row['flood_level'] ?: 'Unknown',
+            'airQuality'    => isset($row['air_quality']) ? (int)$row['air_quality'] : null,
+            'gasAnalog'     => isset($row['gas_analog']) ? (int)$row['gas_analog'] : null,
+            'gasVoltage'    => isset($row['gas_voltage']) ? (float)$row['gas_voltage'] : null,
+        ];
+    } catch (Throwable $e) {
+        error_log('fetchLatestFromDb failed: ' . $e->getMessage());
+        return null;
+    }
 }
 
 // Helper: Save sensor data to database (only if 10 minutes have passed)
@@ -147,8 +181,20 @@ function dummyData($barangay) {
     ];
 }
 
-// If no device for this barangay, return dummy immediately
-if (!$device_ip) {
+// If explicitly requested DB mode (cloud) or no device for this barangay, serve DB or dummy
+if ($mode === 'db' || !$device_ip) {
+    if ($mode === 'db') {
+        $latest = fetchLatestFromDb($barangay);
+        if ($latest) {
+            if ($debug) {
+                echo json_encode(['proxy_status' => 'ok', 'http_status' => 200, 'data' => $latest], JSON_PRETTY_PRINT);
+                exit;
+            }
+            echo json_encode($latest);
+            exit;
+        }
+        // If no DB data yet, fall through to dummy for non-Malanday or offline for Malanday
+    }
     $data = dummyData($barangay);
     $data['barangay']  = $barangay;
     $data['timestamp'] = date('Y-m-d H:i:s');

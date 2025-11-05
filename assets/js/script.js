@@ -553,7 +553,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function poll(){
     if (!currentBrgy) return;
     try {
-      const r = await fetch(`api/get_sensor_data.php?barangay=${encodeURIComponent(currentBrgy)}`);
+  // Use DB-backed readings in cloud/hosted mode so the UI always shows the latest pushed sample
+  const r = await fetch(`api/get_sensor_data.php?mode=db&barangay=${encodeURIComponent(currentBrgy)}`);
       const data = await r.json();
       
       // Check if device is offline/unavailable

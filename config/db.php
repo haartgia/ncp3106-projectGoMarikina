@@ -1,7 +1,7 @@
 <?php
-$host = "localhost";
-$user = "root";      // default user in XAMPP
-$pass = "";          // leave blank (default)
+$host = "db.fr-pari1.bengt.wasmernet.com";
+$user = "b01d5d797c138000d457051efd42";      // default user in XAMPP
+$pass = "0690b01d-5d79-7d56-8000-6f533dffeec9";          // leave blank (default)
 $db   = "user_db";   // your database name
 
 // Establish MySQLi connection. Wrap in try/catch so an unavailable MySQL server

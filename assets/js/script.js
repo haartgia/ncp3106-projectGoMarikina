@@ -195,7 +195,18 @@ document.addEventListener('submit', async (e) => {
   e.preventDefault();
   let ok = true;
   if (window.GOMK && window.GOMK.confirmDialog) {
-    ok = await window.GOMK.confirmDialog(msg, { okText: 'Yes', cancelText: 'Cancel' });
+    // Choose a context-aware label for the OK button
+    let okLabel = 'Yes';
+    try {
+      const actionEl = form.querySelector('input[name="action"]');
+      const actionVal = (actionEl && actionEl.value) ? String(actionEl.value) : '';
+      if (actionVal === 'archive_announcement' || /archive/i.test(msg)) {
+        okLabel = 'Archive';
+      } else if (/delete|remove/i.test(msg) || /delete/i.test(actionVal)) {
+        okLabel = 'Delete';
+      }
+    } catch (e) { /* ignore */ }
+    ok = await window.GOMK.confirmDialog(msg, { okText: okLabel, cancelText: 'Cancel' });
   } else {
     ok = window.confirm(msg);
   }

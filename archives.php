@@ -42,6 +42,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: archives.php');
         exit;
+    } elseif ($action === 'restore_announcement') {
+        $announcementId = (int) ($_POST['announcement_id'] ?? 0);
+
+        if ($announcementId) {
+            try {
+                $check = $conn->query("SHOW TABLES LIKE 'announcements_archive'");
+                $checkMain = $conn->query("SHOW TABLES LIKE 'announcements'");
+                if ($check && $check->num_rows > 0 && $checkMain && $checkMain->num_rows > 0) {
+                    // Move announcement back from archive to main table
+                    $stmt = $conn->prepare('INSERT INTO announcements (id, title, body, image_path, created_at, updated_at) SELECT id, title, body, image_path, created_at, updated_at FROM announcements_archive WHERE id = ?');
+                    if ($stmt === false) {
+                        $_SESSION['archive_feedback'] = 'Failed to prepare restore statement: ' . $conn->error;
+                    } else {
+                        $stmt->bind_param('i', $announcementId);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        // Remove from archive
+                        $stmtDel = $conn->prepare('DELETE FROM announcements_archive WHERE id = ?');
+                        if ($stmtDel === false) {
+                            $_SESSION['archive_feedback'] = 'Failed to prepare delete statement: ' . $conn->error;
+                        } else {
+                            $stmtDel->bind_param('i', $announcementId);
+                            $stmtDel->execute();
+                            $stmtDel->close();
+                            $_SESSION['archive_feedback'] = 'Announcement restored successfully.';
+                        }
+                    }
+                } else {
+                    $_SESSION['archive_feedback'] = 'Archive table not found.';
+                }
+            } catch (Throwable $e) {
+                $_SESSION['archive_feedback'] = 'Failed to restore announcement: ' . $e->getMessage();
+            }
+        }
+        header('Location: archives.php');
+        exit;
     }
 }
 
@@ -353,9 +390,16 @@ $totalArchived = (int)$totalArchivedReports + (int)$totalArchivedAnnouncements;
                                             <?php echo nl2br(htmlspecialchars($announcement['body'], ENT_QUOTES, 'UTF-8')); ?>
                                         </div>
                                         <footer class="archived-announcement-footer">
-                                            <button type="button" class="archive-view-btn archive-view-btn--full" data-announcement='<?php echo htmlspecialchars(json_encode($announcement), ENT_QUOTES, "UTF-8"); ?>'>
-                                                View Details
-                                            </button>
+                                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                                <button type="button" class="archive-view-btn" data-announcement='<?php echo htmlspecialchars(json_encode($announcement), ENT_QUOTES, "UTF-8"); ?>' title="View details">
+                                                    View Details
+                                                </button>
+                                                <form method="post" style="display:inline;">
+                                                    <input type="hidden" name="action" value="restore_announcement">
+                                                    <input type="hidden" name="announcement_id" value="<?php echo (int)$announcement['id']; ?>">
+                                                    <button type="submit" class="archive-restore-btn" title="Restore announcement">Restore</button>
+                                                </form>
+                                            </div>
                                         </footer>
                                     </article>
                                 <?php endforeach; ?>

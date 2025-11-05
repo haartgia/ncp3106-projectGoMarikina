@@ -55,7 +55,33 @@ function fetchLatestFromDb($barangay) {
         $stmt->close();
         $db->close();
         if (!$row) return null;
+        // Base values from DB
         $wp = isset($row['water_percent']) ? max(0, min(100, (int)$row['water_percent'])) : null;
+        $aqiVal = isset($row['air_quality']) ? (int)$row['air_quality'] : null;
+
+        // Fallback: derive water percent from flood_level string when missing or zero but a level is present
+        if ((!$wp || $wp === 0) && !empty($row['flood_level'])) {
+            $fl = strtolower((string)$row['flood_level']);
+            if (strpos($fl, 'level 3') !== false || strpos($fl, 'waist') !== false || strpos($fl, 'full') !== false) {
+                $wp = 100;
+            } elseif (strpos($fl, 'level 2') !== false || strpos($fl, 'knee') !== false || strpos($fl, 'mid') !== false) {
+                $wp = 66;
+            } elseif (strpos($fl, 'level 1') !== false || strpos($fl, 'gutter') !== false || strpos($fl, 'low') !== false) {
+                $wp = 33;
+            } elseif (strpos($fl, 'empty') !== false || strpos($fl, 'no flood') !== false) {
+                $wp = 0;
+            }
+        }
+
+        // Fallback: derive a numeric AQI from gas_analog if air_quality missing
+        if (($aqiVal === null || $aqiVal === 0) && isset($row['gas_analog']) && $row['gas_analog'] !== null) {
+            $ga = (int)$row['gas_analog'];
+            // Mirror device thresholds (<=50 Good, <=100 Moderate, else Bad) to numeric midpoints
+            if ($ga <= 50)       { $aqiVal = 75; }
+            elseif ($ga <= 100)  { $aqiVal = 125; }
+            else                  { $aqiVal = 175; }
+        }
+
         return [
             'barangay'      => $row['barangay'],
             'timestamp'     => $row['reading_timestamp'],
@@ -66,7 +92,7 @@ function fetchLatestFromDb($barangay) {
             'humidity'      => isset($row['humidity']) ? (float)$row['humidity'] : null,
             'waterPercent'  => $wp,
             'floodLevel'    => $row['flood_level'] ?: 'Unknown',
-            'airQuality'    => isset($row['air_quality']) ? (int)$row['air_quality'] : null,
+            'airQuality'    => $aqiVal,
             'gasAnalog'     => isset($row['gas_analog']) ? (int)$row['gas_analog'] : null,
             'gasVoltage'    => isset($row['gas_voltage']) ? (float)$row['gas_voltage'] : null,
         ];

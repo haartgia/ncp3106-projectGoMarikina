@@ -46,16 +46,53 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
 $barangay = $data['barangay'] ?? '';
 $temperature = $data['temperature'] ?? null;
 $humidity = $data['humidity'] ?? null;
-$water_percent = $data['waterPercent'] ?? $data['water_percent'] ?? 0;
+$water_percent = $data['waterPercent'] ?? $data['water_percent'] ?? ($data['waterLevel'] ?? null);
 $water_percent = (int)max(0, min(100, (int)$water_percent));
 $flood_level = $data['floodLevel'] ?? $data['flood_level'] ?? '';
-$air_quality = $data['airQuality'] ?? $data['air_quality'] ?? null;
+$air_quality = $data['airQuality'] ?? $data['air_quality'] ?? ($data['aqi'] ?? ($data['AQI'] ?? null));
 $gas_analog = $data['gasAnalog'] ?? $data['gas_analog'] ?? null;
 $gas_voltage = $data['gasVoltage'] ?? $data['gas_voltage'] ?? null;
 $device_ip = $data['device_ip'] ?? $data['deviceIp'] ?? null;
 $status = $data['status'] ?? 'online';
 $source = $data['source'] ?? 'esp32';
 $reading_timestamp = $data['timestamp'] ?? $data['reading_timestamp'] ?? date('Y-m-d H:i:s');
+
+// Normalize AQI: accept string categories and common aliases
+if (is_string($air_quality)) {
+    $aqs = strtolower(trim($air_quality));
+    if ($aqs === 'excellent') {
+        $air_quality = 25; // midpoint of 0–50
+    } elseif ($aqs === 'good') {
+        $air_quality = 75; // midpoint of 51–100
+    } elseif ($aqs === 'moderate') {
+        $air_quality = 125; // midpoint of 101–150
+    } elseif ($aqs === 'bad' || $aqs === 'poor') {
+        $air_quality = 175; // midpoint of 151+
+    } elseif (is_numeric($air_quality)) {
+        $air_quality = (int)$air_quality;
+    } else {
+        $air_quality = null;
+    }
+}
+if ($air_quality !== null && !is_int($air_quality)) {
+    $air_quality = (int)$air_quality;
+}
+
+// If water percent is missing but we have a flood level string, derive an approximate percent
+if ((!isset($data['waterPercent']) && !isset($data['water_percent']) && !isset($data['waterLevel'])) && $flood_level) {
+    $fl = strtolower((string)$flood_level);
+    if (strpos($fl, 'level 3') !== false || strpos($fl, 'waist') !== false || strpos($fl, 'full') !== false) {
+        $water_percent = 100;
+    } elseif (strpos($fl, 'level 2') !== false || strpos($fl, 'knee') !== false || strpos($fl, 'mid') !== false) {
+        $water_percent = 66;
+    } elseif (strpos($fl, 'level 1') !== false || strpos($fl, 'gutter') !== false || strpos($fl, 'low') !== false) {
+        $water_percent = 33;
+    } elseif (strpos($fl, 'empty') !== false || strpos($fl, 'no flood') !== false) {
+        $water_percent = 0;
+    }
+}
+// Final clamp
+$water_percent = (int)max(0, min(100, (int)$water_percent));
 
 // Derive a consistent flood_level string if not provided
 if ($flood_level === '' || $flood_level === null) {

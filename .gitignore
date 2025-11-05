@@ -1,6 +1,9 @@
 # Ignore local config that contains API keys
 config/geocode_keys.php
 
+# Ignore environment variables with secrets
+.env
+
 # Ignore geocode cache
 api/.cache_geocode/
 

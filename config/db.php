@@ -1,15 +1,16 @@
 <?php
 $host = "db.fr-pari1.bengt.wasmernet.com";
-$user = "b01d5d797c138000d457051efd42";      // default user in XAMPP
-$pass = "0690b01d-5d79-7d56-8000-6f533dffeec9";          // leave blank (default)
-$db   = "user_db";   // your database name
+$user = "b01d5d797c138000d457051efd42";  // remote DB user
+$pass = "0690b01d-5d79-7d56-8000-6f533dffeec9";
+$db   = "user_db";
+$port = 10272; // your MySQL port
 
 // Establish MySQLi connection. Wrap in try/catch so an unavailable MySQL server
 // doesn't produce an uncaught exception (which previously crashed Apache child
 // processes). Instead we log the error and show a friendly message.
 mysqli_report(MYSQLI_REPORT_OFF);
 try {
-    $conn = new mysqli($host, $user, $pass, $db);
+    $conn = new mysqli($host, $user, $pass, $db, $port); // <— added $port here
     if ($conn->connect_error) {
         // handle non-exceptional connection errors
         error_log('DB connect error: ' . $conn->connect_error);
@@ -33,10 +34,11 @@ function get_db_connection() {
     $user = "root";
     $pass = "";
     $db   = "user_db";
-    
+    $port = 3306; // default local port
+
     mysqli_report(MYSQLI_REPORT_OFF);
     try {
-        $conn = new mysqli($host, $user, $pass, $db);
+        $conn = new mysqli($host, $user, $pass, $db, $port); // <— added $port here too
         if ($conn->connect_error) {
             throw new Exception('DB connect error: ' . $conn->connect_error);
         }

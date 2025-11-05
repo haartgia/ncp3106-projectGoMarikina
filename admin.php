@@ -39,6 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Ensure session changes (like admin_feedback) are flushed before redirect
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
     header('Location: admin.php');
     exit;
 }

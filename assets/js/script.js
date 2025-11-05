@@ -2557,7 +2557,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const fd = new FormData();
           fd.append('report_id', reportId);
           fd.append('status', status);
-          const r = await fetch('api/reports_update_status.php', { method: 'POST', body: fd });
+          const r = await fetch('api/reports_update_status.php', { method: 'POST', body: fd, credentials: 'same-origin' });
           const data = await r.json().catch(() => ({}));
           if (!r.ok || !data.success) {
             throw new Error(data.message || 'Failed to update status');

@@ -108,7 +108,7 @@ function store_as_base64($file, $mime) {
 
 /**
  * Store to AWS S3 or S3-compatible storage
- * Requires: AWS SDK or cURL
+ * Uses direct HTTP PUT request (no SDK required)
  */
 function store_to_s3($file, $context, $ext) {
     // Configuration from environment variables
@@ -127,10 +127,93 @@ function store_to_s3($file, $context, $ext) {
     // Generate unique filename
     $filename = $context . '/' . bin2hex(random_bytes(8)) . '.' . $ext;
     
-    // TODO: Implement S3 upload using AWS SDK or cURL
-    // For now, fallback to local
-    error_log('S3 upload not yet implemented, falling back to local storage');
-    return store_locally($file, $context, $ext);
+    // Read file content
+    $fileContent = file_get_contents($file['tmp_name']);
+    if ($fileContent === false) {
+        return ['success' => false, 'path' => null, 'error' => 'Failed to read file'];
+    }
+    
+    // Determine content type
+    $contentTypes = [
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'gif' => 'image/gif'
+    ];
+    $contentType = $contentTypes[$ext] ?? 'application/octet-stream';
+    
+    // Build S3 URL
+    if ($endpoint) {
+        // Custom endpoint (for S3-compatible services)
+        $host = parse_url($endpoint, PHP_URL_HOST);
+        $scheme = parse_url($endpoint, PHP_URL_SCHEME) ?: 'https';
+        $url = "$scheme://$host/$bucket/$filename";
+    } else {
+        // Standard AWS S3
+        $host = "$bucket.s3.$region.amazonaws.com";
+        $url = "https://$host/$filename";
+    }
+    
+    // Create signature for AWS v4
+    $timestamp = gmdate('Ymd\THis\Z');
+    $dateStamp = gmdate('Ymd');
+    $contentHash = hash('sha256', $fileContent);
+    
+    // Create canonical request
+    $canonicalUri = '/' . $filename;
+    $canonicalQueryString = '';
+    $canonicalHeaders = "content-type:$contentType\n" .
+                        "host:$host\n" .
+                        "x-amz-content-sha256:$contentHash\n" .
+                        "x-amz-date:$timestamp\n";
+    $signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
+    
+    $canonicalRequest = "PUT\n$canonicalUri\n$canonicalQueryString\n$canonicalHeaders\n$signedHeaders\n$contentHash";
+    
+    // Create string to sign
+    $credentialScope = "$dateStamp/$region/s3/aws4_request";
+    $stringToSign = "AWS4-HMAC-SHA256\n$timestamp\n$credentialScope\n" . hash('sha256', $canonicalRequest);
+    
+    // Calculate signature
+    $kDate = hash_hmac('sha256', $dateStamp, "AWS4$secretKey", true);
+    $kRegion = hash_hmac('sha256', $region, $kDate, true);
+    $kService = hash_hmac('sha256', 's3', $kRegion, true);
+    $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+    $signature = hash_hmac('sha256', $stringToSign, $kSigning);
+    
+    // Build authorization header
+    $authorization = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature";
+    
+    // Upload to S3 using cURL
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST => 'PUT',
+        CURLOPT_POSTFIELDS => $fileContent,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: $authorization",
+            "Content-Type: $contentType",
+            "x-amz-content-sha256: $contentHash",
+            "x-amz-date: $timestamp",
+            "Content-Length: " . strlen($fileContent)
+        ],
+        CURLOPT_TIMEOUT => 30
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        // Success! Return public URL
+        $publicUrl = $url;
+        return ['success' => true, 'path' => $publicUrl, 'error' => null];
+    } else {
+        error_log("S3 upload failed: HTTP $httpCode - $response - $curlError");
+        return ['success' => false, 'path' => null, 'error' => "S3 upload failed: HTTP $httpCode"];
+    }
 }
 
 /**
@@ -175,9 +258,83 @@ function delete_image($path) {
         return true;
     }
     
-    // For cloud storage, implement deletion
-    // TODO: S3/Cloudinary deletion
+    // If it's an S3 URL, delete from S3
+    if (strpos($path, 'https://') === 0 && strpos($path, '.s3.') !== false) {
+        return delete_from_s3($path);
+    }
+    
+    // For other cloud storage, implement deletion
+    // TODO: Cloudinary deletion
     
     return true;
+}
+
+/**
+ * Delete a file from S3
+ * 
+ * @param string $url The S3 URL
+ * @return bool Success status
+ */
+function delete_from_s3($url) {
+    $bucket = getenv('S3_BUCKET');
+    $region = getenv('S3_REGION') ?: 'us-east-1';
+    $accessKey = getenv('S3_ACCESS_KEY');
+    $secretKey = getenv('S3_SECRET_KEY');
+    
+    if (!$bucket || !$accessKey || !$secretKey) {
+        error_log('S3 credentials not configured, cannot delete');
+        return false;
+    }
+    
+    // Extract key from URL
+    $host = "$bucket.s3.$region.amazonaws.com";
+    if (strpos($url, $host) === false) {
+        error_log("URL doesn't match expected S3 bucket: $url");
+        return false;
+    }
+    
+    $key = str_replace("https://$host/", '', $url);
+    
+    // Create signature for DELETE request
+    $timestamp = gmdate('Ymd\THis\Z');
+    $dateStamp = gmdate('Ymd');
+    $contentHash = hash('sha256', '');
+    
+    $canonicalUri = '/' . $key;
+    $canonicalHeaders = "host:$host\n" .
+                        "x-amz-content-sha256:$contentHash\n" .
+                        "x-amz-date:$timestamp\n";
+    $signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    
+    $canonicalRequest = "DELETE\n$canonicalUri\n\n$canonicalHeaders\n$signedHeaders\n$contentHash";
+    
+    $credentialScope = "$dateStamp/$region/s3/aws4_request";
+    $stringToSign = "AWS4-HMAC-SHA256\n$timestamp\n$credentialScope\n" . hash('sha256', $canonicalRequest);
+    
+    $kDate = hash_hmac('sha256', $dateStamp, "AWS4$secretKey", true);
+    $kRegion = hash_hmac('sha256', $region, $kDate, true);
+    $kService = hash_hmac('sha256', 's3', $kRegion, true);
+    $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+    $signature = hash_hmac('sha256', $stringToSign, $kSigning);
+    
+    $authorization = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature";
+    
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: $authorization",
+            "x-amz-content-sha256: $contentHash",
+            "x-amz-date: $timestamp"
+        ],
+        CURLOPT_TIMEOUT => 30
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    return ($httpCode >= 200 && $httpCode < 300) || $httpCode === 404;
 }
 ?>

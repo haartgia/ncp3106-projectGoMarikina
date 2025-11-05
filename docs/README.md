@@ -35,6 +35,12 @@ This ensures sessions, auth helpers, DB connection (`$conn`), and shared helpers
 - Database: MariaDB/MySQL running with a `user_db` schema. See `docs/sql/` migrations and `docs/SENSOR_DATABASE_SETUP.md`.
 - App root: `http://localhost/ncp3106-projectGoMarikina/`
 
+After pulling recent changes, apply the latest SQL migration to enforce unique mobile numbers:
+
+1. Clean up any duplicate `users.mobile` values (keep one per number).
+2. Run the migration `docs/sql/008_add_unique_mobile.sql` in your DB.
+  - If duplicates exist, MySQL will error with 1062 (duplicate key) — resolve and rerun.
+
 ## Notes
 
 - `includes/footer.php` exists for future shared footer content; it is included in some pages.

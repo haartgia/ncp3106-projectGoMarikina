@@ -48,13 +48,29 @@ if ($confirm_password === '' || $confirm_password !== $password) {
     exit;
 }
 
-$stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-$stmt->bind_param("s", $email);
+$stmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR mobile = ?");
+$stmt->bind_param("ss", $email, $mobile);
 $stmt->execute();
 $stmt->store_result();
 
 if ($stmt->num_rows > 0) {
-    $_SESSION['login_error'] = 'Email already exists.';
+    // Provide a friendly, specific error. Run targeted checks to craft message.
+    $dupeMsg = 'Account with that email or mobile already exists.';
+    // Check email duplicate
+    $stmt2 = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+    $stmt2->bind_param("s", $email);
+    $stmt2->execute();
+    $stmt2->store_result();
+    if ($stmt2->num_rows > 0) { $dupeMsg = 'Email already exists.'; }
+    $stmt2->close();
+    // Check mobile duplicate
+    $stmt3 = $conn->prepare("SELECT id FROM users WHERE mobile = ? LIMIT 1");
+    $stmt3->bind_param("s", $mobile);
+    $stmt3->execute();
+    $stmt3->store_result();
+    if ($stmt3->num_rows > 0) { $dupeMsg = 'Mobile number already exists.'; }
+    $stmt3->close();
+    $_SESSION['login_error'] = $dupeMsg;
     header('Location: profile.php');
     exit;
 }

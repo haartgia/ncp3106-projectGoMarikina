@@ -39,12 +39,34 @@ try {
             exit;
         }
 
+        // Check for duplicates on other accounts
+        $chk = $conn->prepare('SELECT id FROM users WHERE mobile = ? AND id <> ? LIMIT 1');
+        $chk->bind_param('si', $value, $user_id);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) {
+            $chk->close();
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'Mobile number already in use by another account.']);
+            exit;
+        }
+        $chk->close();
+
         $stmt = $conn->prepare('UPDATE users SET mobile = ? WHERE id = ?');
         $stmt->bind_param('si', $value, $user_id);
         $ok = $stmt->execute();
+        if (!$ok) {
+            // Handle potential unique constraint violation gracefully
+            $errNo = $conn->errno;
+            $stmt->close();
+            if ($errNo === 1062) { // duplicate key
+                http_response_code(409);
+                echo json_encode(['success' => false, 'message' => 'Mobile number already in use.']);
+                exit;
+            }
+            throw new Exception('Database error while updating mobile');
+        }
         $stmt->close();
-
-        if (!$ok) throw new Exception('Database error while updating mobile');
 
         echo json_encode(['success' => true, 'message' => 'Mobile number updated', 'field' => 'mobile', 'value' => $value]);
         exit;

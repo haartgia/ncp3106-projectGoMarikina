@@ -2527,12 +2527,31 @@ document.addEventListener('DOMContentLoaded', () => {
       const actionInput = form.querySelector('input[name="action"][value="update_status"]');
       const select = form.querySelector('select[name="status"]');
       if (!actionInput || !select) return;
+      const wrapper = select.closest('.admin-select-wrapper');
 
       const reportIdInput = form.querySelector('input[name="report_id"]');
       const reportId = reportIdInput ? reportIdInput.value : '';
 
+      const applyColorClass = () => {
+        const v = String(select.value || '').toLowerCase();
+        select.classList.remove('status-unresolved','status-in_progress','status-solved');
+        if (v === 'in_progress' || v === 'in-progress') select.classList.add('status-in_progress');
+        else if (v === 'solved' || v === 'resolved') select.classList.add('status-solved');
+        else select.classList.add('status-unresolved');
+        if (wrapper) {
+          wrapper.classList.remove('status-unresolved','status-in_progress','status-solved');
+          if (v === 'in_progress' || v === 'in-progress') wrapper.classList.add('status-in_progress');
+          else if (v === 'solved' || v === 'resolved') wrapper.classList.add('status-solved');
+          else wrapper.classList.add('status-unresolved');
+        }
+      };
+
+      // Apply on load
+      applyColorClass();
+
       const handleChange = async () => {
         const status = select.value;
+        applyColorClass();
         select.disabled = true;
         try {
           const fd = new FormData();
@@ -2545,6 +2564,8 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           select.classList.add('saved');
           setTimeout(() => select.classList.remove('saved'), 800);
+          // Trigger a live snapshot refresh so the top cards update immediately
+          try { window.GOMK && typeof window.GOMK.refreshAdminSnapshot === 'function' && window.GOMK.refreshAdminSnapshot(); } catch (e) {}
         } catch (e) {
           if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast(e.message || 'There was a problem updating the status.', { type: 'error' });
           else alert(e.message || 'There was a problem updating the status.');
@@ -2558,6 +2579,76 @@ document.addEventListener('DOMContentLoaded', () => {
         handleChange();
       });
     });
+  })();
+
+  // Admin: live snapshot updater for Operations snapshot
+  (function initAdminSnapshotLive() {
+    const totalEl = document.querySelector('[data-snap-total]');
+    const openEl = document.querySelector('[data-snap-open]');
+    const progressEl = document.querySelector('[data-snap-progress]');
+    const solvedEl = document.querySelector('[data-snap-solved]');
+    const barOpen = document.querySelector('[data-snap-open-meter]');
+    const barProg = document.querySelector('[data-snap-progress-meter]');
+    const barSolved = document.querySelector('[data-snap-solved-meter]');
+    const noteOpen = document.querySelector('[data-snap-open-note]');
+    const noteProg = document.querySelector('[data-snap-progress-note]');
+    const noteSolved = document.querySelector('[data-snap-solved-note]');
+    const chipOpen = document.querySelector('[data-snap-open-chip]');
+    const chipSolved = document.querySelector('[data-snap-solved-chip]');
+
+    const present = (totalEl || openEl || progressEl || solvedEl);
+    if (!present) return; // only on admin page
+
+  let timer; let last;
+    const fmt = (n) => (typeof n === 'number' ? n : parseInt(n||0,10) || 0);
+
+    const apply = (data) => {
+      try {
+        const total = fmt(data.total);
+        const unresolved = fmt(data.counts?.unresolved);
+        const inProg = fmt(data.counts?.in_progress);
+        const solved = fmt(data.counts?.solved);
+        const rates = data.rates || {};
+        const rOpen = fmt(rates.open);
+        const rProg = fmt(rates.in_progress);
+        const rSolved = fmt(rates.solved);
+
+        if (totalEl) totalEl.textContent = String(total);
+        if (openEl) openEl.textContent = String(unresolved);
+        if (progressEl) progressEl.textContent = String(inProg);
+        if (solvedEl) solvedEl.textContent = String(solved);
+        if (barOpen) barOpen.style.width = Math.max(0, Math.min(100, rOpen)) + '%';
+        if (barProg) barProg.style.width = Math.max(0, Math.min(100, rProg)) + '%';
+        if (barSolved) barSolved.style.width = Math.max(0, Math.min(100, rSolved)) + '%';
+        if (noteOpen) noteOpen.textContent = `${rOpen}% of all requests are still unresolved.`;
+        if (noteProg) noteProg.textContent = `${rProg}% have teams presently dispatched.`;
+        if (noteSolved) noteSolved.textContent = `Resolution rate holding at ${rSolved}%.`;
+        if (chipOpen) chipOpen.textContent = `${rOpen}% open`;
+        if (chipSolved) chipSolved.textContent = `${rSolved}% resolved`;
+      } catch (e) { /* ignore */ }
+    };
+
+    const fetchOnce = async () => {
+      try {
+        const r = await fetch('api/admin_snapshot.php', { cache: 'no-store', credentials: 'same-origin' });
+        const data = await r.json();
+        if (!data || data.success === false) throw new Error(data?.message || 'Snapshot error');
+        last = data; apply(data);
+      } catch (e) {
+        // Best-effort: keep last values
+      }
+    };
+
+    // Expose manual refresh for other modules and poll frequently
+    window.GOMK = window.GOMK || {};
+    window.GOMK.refreshAdminSnapshot = fetchOnce;
+
+    // Initial and polling every 5s
+    fetchOnce();
+    timer = setInterval(fetchOnce, 5000);
+
+    // Clean up if needed
+    window.addEventListener('beforeunload', () => { try { clearInterval(timer); } catch (e) {} });
   })();
 
   // Auth card mode toggle (login <-> signup) on profile page.

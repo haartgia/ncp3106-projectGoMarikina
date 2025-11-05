@@ -1,5 +1,23 @@
 <?php
+// Harden session cookie settings before starting the session
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+    // Ensure cookies work across the whole site and are HTTP-only
+    // SameSite=Lax allows POST->redirect flows to carry the cookie
+    if (function_exists('session_set_cookie_params')) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'domain' => '',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+    // Use a custom session name to avoid conflicts with other PHP apps on the same host
+    if (function_exists('session_name')) {
+        @session_name('GOMKSESSID');
+    }
     session_start();
 }
 

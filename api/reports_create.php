@@ -131,28 +131,29 @@ try {
         $hasLatLng = false;
     }
 
-    // Only include latitude/longitude in INSERT when BOTH values are present.
-    // This avoids binding NULL to 'd' (double) parameters which throws in DEBUG mode.
-    $useLatLng = $hasLatLng && ($latitude !== null) && ($longitude !== null);
+    // Compute safe numeric values for lat/lng if table has these columns but caller omitted one/both.
+    // Some databases may define latitude/longitude as NOT NULL; using 0.0 avoids insert errors.
+    $latSafe = ($latitude !== null) ? (float)$latitude : 0.0;
+    $lngSafe = ($longitude !== null) ? (float)$longitude : 0.0;
 
     // Build and run the appropriate INSERT
-    if ($useLatLng) {
+    if ($hasLatLng) {
         if ($hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
-            $stmt->bind_param('isssssdd', $userId, $title, $category, $description, $location, $imagePath, $latitude, $longitude);
+            $stmt->bind_param('isssssdd', $userId, $title, $category, $description, $location, $imagePath, $latSafe, $lngSafe);
         } elseif ($hasUser && !$hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
-            $stmt->bind_param('issssdd', $userId, $title, $category, $description, $location, $latitude, $longitude);
+            $stmt->bind_param('issssdd', $userId, $title, $category, $description, $location, $latSafe, $lngSafe);
         } elseif (!$hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
-            $stmt->bind_param('sssssdd', $title, $category, $description, $location, $imagePath, $latitude, $longitude);
+            $stmt->bind_param('sssssdd', $title, $category, $description, $location, $imagePath, $latSafe, $lngSafe);
         } else { // no user, no image
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
-            $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latitude, $longitude);
+            $stmt->bind_param('ssssdd', $title, $category, $description, $location, $latSafe, $lngSafe);
         }
     } else {
     // Fallback path for schemas without latitude/longitude columns

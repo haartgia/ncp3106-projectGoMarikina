@@ -18,6 +18,8 @@ if ($email === '' || $password === '') {
 
 //  Admin login
 if ($email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
+    // Regenerate session ID on privilege change/login
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
     $_SESSION['user'] = [
         'id' => 0,
         'email' => $email,
@@ -37,6 +39,7 @@ $result = $stmt->get_result();
 
 if ($user = $result->fetch_assoc()) {
     if (password_verify($password, $user['password'])) {
+        if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
         $_SESSION['user'] = [
             'id' => $user['id'],
             'email' => $user['email'],

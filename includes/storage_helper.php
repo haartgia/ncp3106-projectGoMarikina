@@ -61,6 +61,16 @@ function store_image($file, $context = 'general') {
     // Check if we should use cloud storage or local fallback
     $storageMethod = getenv('STORAGE_METHOD') ?: 'local';
     
+    // If Cloudinary is selected but credentials are missing, surface a clear error
+    if ($storageMethod === 'cloudinary') {
+        $cn = getenv('CLOUDINARY_CLOUD_NAME');
+        $ck = getenv('CLOUDINARY_API_KEY');
+        $cs = getenv('CLOUDINARY_API_SECRET');
+        if (!$cn || !$ck || !$cs) {
+            return ['success' => false, 'path' => null, 'error' => 'Cloudinary not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.'];
+        }
+    }
+    
     switch ($storageMethod) {
         case 's3':
         case 'aws':

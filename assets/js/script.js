@@ -550,6 +550,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return { level: 3 };                // Waist deep (67–100)
   }
 
+  // Robust numeric coercion that returns null for non-numeric values
+  function toNumber(val){
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function dispatchUpdate(payload){
     const ev = new CustomEvent('gomk:data', { detail: payload });
     window.dispatchEvent(ev);
@@ -560,7 +566,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!currentBrgy) return;
     try {
   // Use DB-backed readings in cloud/hosted mode so the UI always shows the latest pushed sample
-  const r = await fetch(`api/get_sensor_data.php?mode=db&barangay=${encodeURIComponent(currentBrgy)}`);
+  // Add cache-busting timestamp and disable HTTP cache
+  const url = `api/get_sensor_data.php?mode=db&barangay=${encodeURIComponent(currentBrgy)}&t=${Date.now()}`;
+  const r = await fetch(url, { cache: 'no-store' });
       const data = await r.json();
       
       // Check if device is offline/unavailable
@@ -577,10 +585,20 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (data.status !== 'online' && data.status !== 'degraded') return;
 
-      const wl = computeWaterAlertLevel(Number(data.waterPercent || data.waterLevel || 0)).level;
-      const aqi = Number(data.airQuality);
-      const t   = Number(data.temperature);
-      const h   = Number(data.humidity);
+      const wl = computeWaterAlertLevel(toNumber(data.waterPercent ?? data.waterLevel ?? 0)).level;
+      // AQI can arrive with different casings/aliases depending on source; coerce robustly
+      const aqi = toNumber(
+        (data && (
+          data.airQuality ??
+          data.air_quality ??
+          data.aqi ??
+          data.AQI ??
+          data.airQualityIndex ??
+          data.air_quality_index
+        ))
+      );
+      const t   = toNumber(data.temperature);
+      const h   = toNumber(data.humidity);
       const ts  = data.timestamp || new Date().toISOString();
 
       const hist = loadHistoryFor(currentBrgy);
@@ -596,8 +614,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function start(){
     if (pollInterval) clearInterval(pollInterval);
-    poll();
-    pollInterval = setInterval(poll, 5000);
+  poll();
+  // Faster polling for more "real-time" dashboard updates
+  pollInterval = setInterval(poll, 2000);
   }
 
   function setBarangay(b){ currentBrgy = b || ''; localStorage.setItem(SELECT_KEY, currentBrgy); start(); }

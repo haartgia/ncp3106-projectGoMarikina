@@ -13,6 +13,9 @@
  */
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 date_default_timezone_set('Asia/Manila'); // ensure PHP timestamps are PH time
 
@@ -82,6 +85,7 @@ function saveSensorData($data) {
         
         // Check if we should save (only every 10 minutes)
         // Get the last saved timestamp for this barangay
+    $throttleSeconds = 30; // make near real-time but avoid write storms
         $check_stmt = $db->prepare("
             SELECT reading_timestamp 
             FROM sensor_data 
@@ -98,8 +102,8 @@ function saveSensorData($data) {
             $last_timestamp = strtotime($row['reading_timestamp']);
             $current_time = time();
             
-            // Only save if 10 minutes (600 seconds) have passed
-            if (($current_time - $last_timestamp) < 600) {
+            // Only save if enough time has passed
+            if (($current_time - $last_timestamp) < 30) {
                 $check_stmt->close();
                 $db->close();
                 return false; // Skip saving, not enough time has passed

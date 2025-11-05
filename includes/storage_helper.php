@@ -218,7 +218,7 @@ function store_to_s3($file, $context, $ext) {
 
 /**
  * Store to Cloudinary
- * Requires: Cloudinary PHP SDK or cURL
+ * Uses Cloudinary Upload API with direct HTTP POST
  */
 function store_to_cloudinary($file, $context, $ext) {
     $cloudName = getenv('CLOUDINARY_CLOUD_NAME');
@@ -230,9 +230,56 @@ function store_to_cloudinary($file, $context, $ext) {
         return store_locally($file, $context, $ext);
     }
     
-    // TODO: Implement Cloudinary upload
-    error_log('Cloudinary upload not yet implemented, falling back to local storage');
-    return store_locally($file, $context, $ext);
+    // Generate unique public ID
+    $publicId = $context . '/' . bin2hex(random_bytes(8));
+    
+    // Create timestamp for signature
+    $timestamp = time();
+    
+    // Create signature (SHA1 hash of parameters + secret)
+    $paramsToSign = "folder=$context&public_id=$publicId&timestamp=$timestamp";
+    $signature = sha1($paramsToSign . $apiSecret);
+    
+    // Prepare upload
+    $url = "https://api.cloudinary.com/v1_1/$cloudName/image/upload";
+    
+    // Create POST data
+    $postData = [
+        'file' => new CURLFile($file['tmp_name'], $file['type'], $file['name']),
+        'api_key' => $apiKey,
+        'timestamp' => $timestamp,
+        'signature' => $signature,
+        'folder' => $context,
+        'public_id' => $publicId
+    ];
+    
+    // Upload to Cloudinary
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $postData,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        $result = json_decode($response, true);
+        if (isset($result['secure_url'])) {
+            return ['success' => true, 'path' => $result['secure_url'], 'error' => null];
+        } else {
+            error_log("Cloudinary upload succeeded but no URL returned: $response");
+            return ['success' => false, 'path' => null, 'error' => 'Upload succeeded but no URL returned'];
+        }
+    } else {
+        error_log("Cloudinary upload failed: HTTP $httpCode - $response - $curlError");
+        return ['success' => false, 'path' => null, 'error' => "Cloudinary upload failed: HTTP $httpCode"];
+    }
 }
 
 /**
@@ -263,8 +310,10 @@ function delete_image($path) {
         return delete_from_s3($path);
     }
     
-    // For other cloud storage, implement deletion
-    // TODO: Cloudinary deletion
+    // If it's a Cloudinary URL, delete from Cloudinary
+    if (strpos($path, 'cloudinary.com') !== false) {
+        return delete_from_cloudinary($path);
+    }
     
     return true;
 }
@@ -336,5 +385,67 @@ function delete_from_s3($url) {
     curl_close($ch);
     
     return ($httpCode >= 200 && $httpCode < 300) || $httpCode === 404;
+}
+
+/**
+ * Delete a file from Cloudinary
+ * 
+ * @param string $url The Cloudinary URL
+ * @return bool Success status
+ */
+function delete_from_cloudinary($url) {
+    $cloudName = getenv('CLOUDINARY_CLOUD_NAME');
+    $apiKey = getenv('CLOUDINARY_API_KEY');
+    $apiSecret = getenv('CLOUDINARY_API_SECRET');
+    
+    if (!$cloudName || !$apiKey || !$apiSecret) {
+        error_log('Cloudinary credentials not configured, cannot delete');
+        return false;
+    }
+    
+    // Extract public_id from URL
+    // Example: https://res.cloudinary.com/demo/image/upload/v1234567890/reports/abc123.jpg
+    // public_id would be: reports/abc123
+    
+    $pattern = '/\/upload\/(?:v\d+\/)?(.+)\.\w+$/';
+    if (preg_match($pattern, $url, $matches)) {
+        $publicId = $matches[1];
+    } else {
+        error_log("Could not extract public_id from Cloudinary URL: $url");
+        return false;
+    }
+    
+    // Create timestamp and signature
+    $timestamp = time();
+    $paramsToSign = "public_id=$publicId&timestamp=$timestamp";
+    $signature = sha1($paramsToSign . $apiSecret);
+    
+    // Delete from Cloudinary
+    $deleteUrl = "https://api.cloudinary.com/v1_1/$cloudName/image/destroy";
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $deleteUrl,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => [
+            'public_id' => $publicId,
+            'api_key' => $apiKey,
+            'timestamp' => $timestamp,
+            'signature' => $signature
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        $result = json_decode($response, true);
+        return isset($result['result']) && ($result['result'] === 'ok' || $result['result'] === 'not found');
+    }
+    
+    return false;
 }
 ?>

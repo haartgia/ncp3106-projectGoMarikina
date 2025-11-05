@@ -4,7 +4,31 @@
 
 Since Wasmer uses an ephemeral filesystem (files don't persist between deployments), you need to configure external storage for user-uploaded images.
 
-### Option 1: Base64 Storage in Database (Simplest)
+### Option 1: Cloudinary (⭐ RECOMMENDED for Temporary Sites)
+
+**Pros:** 
+- ⚡ Super easy 5-minute setup
+- 🎁 Free tier (no credit card needed)
+- 🖼️ Automatic image optimization
+- 🚀 Fast global CDN
+- 📱 Great dashboard UI
+
+**Cons:** Free tier limits (25 GB storage, 25 GB/month bandwidth)
+
+**Setup:**
+1. Sign up at https://cloudinary.com/users/register_free
+2. Get your Cloud Name, API Key, and API Secret
+3. Set environment variables in Wasmer:
+```
+STORAGE_METHOD=cloudinary
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+```
+
+📖 **Full Guide:** See `docs/CLOUDINARY_SETUP_GUIDE.md`
+
+### Option 2: Base64 Storage in Database (Quick Test)
 
 **Pros:** No external service needed, works immediately
 **Cons:** Increases database size, not ideal for many/large images
@@ -14,7 +38,7 @@ Set environment variable in Wasmer:
 STORAGE_METHOD=base64
 ```
 
-### Option 2: AWS S3 Storage (Recommended for Production)
+### Option 3: AWS S3 Storage (Best for Production)
 
 **Pros:** Scalable, fast, professional
 **Cons:** Requires AWS account and configuration

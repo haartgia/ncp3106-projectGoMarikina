@@ -3263,12 +3263,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const pf = formData.get('photo');
           if (pf instanceof File) hasPhotoFile = true;
 
-          // Photo is optional. Ensure we don't send an empty string for 'photo'
-          // (some browsers may include an empty value in FormData). If no valid
-          // File is present, remove the key so backend sees it as absent.
+          // Photo is REQUIRED for submission. If no File present, stop and ask user.
           const pfFinal = formData.get('photo');
           if (!(pfFinal instanceof File)) {
-            try { formData.delete('photo'); } catch (e) {}
+            (window.GOMK && window.GOMK.showToast)
+              ? window.GOMK.showToast('Please add a photo to your report', { type: 'info' })
+              : alert('Please add a photo to your report');
+            return;
           }
 
           // Submit to backend

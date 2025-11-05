@@ -16,6 +16,9 @@ if (file_exists(__DIR__ . '/env.php')) {
     }
 }
 
+// Allow API endpoints to control their own caching headers; disable session nocache
+if (function_exists('session_cache_limiter')) { @session_cache_limiter(''); }
+
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 

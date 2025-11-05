@@ -98,7 +98,12 @@ if ($stmt->execute()) {
     header('Location: profile.php');
     exit;
 } else {
-    $_SESSION['login_error'] = 'Error creating account. Please try again.';
+    // More helpful error details when DEBUG is on
+    $DBG = getenv('DEBUG') === '1' || (isset($_GET['debug']) && $_GET['debug'] === '1');
+    $detail = $stmt->error ?: ($conn->error ?? '');
+    $_SESSION['login_error'] = $DBG && $detail
+        ? ('Error creating account: ' . $detail)
+        : 'Error creating account. Please try again.';
     header('Location: profile.php');
     exit;
 }

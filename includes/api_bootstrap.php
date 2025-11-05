@@ -8,11 +8,24 @@
 
 header('Content-Type: application/json');
 
+// Load .env if present (local dev convenience) before reading any env vars
+if (file_exists(__DIR__ . '/env.php')) {
+    require_once __DIR__ . '/env.php';
+    if (function_exists('load_app_env')) {
+        load_app_env();
+    }
+}
+
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 
 // Optional debug mode: surface PHP errors as JSON instead of blank 500s
+// Allow DEBUG via env or ad-hoc toggle (e.g., ?debug=1 during troubleshooting)
 $__DEBUG = getenv('DEBUG') ?: '0';
+if ($__DEBUG !== '1') {
+    $q = $_GET['debug'] ?? $_SERVER['HTTP_X_DEBUG'] ?? '0';
+    if ($q === '1') { $__DEBUG = '1'; }
+}
 if ($__DEBUG === '1') {
     error_reporting(E_ALL);
     ini_set('display_errors', '0');

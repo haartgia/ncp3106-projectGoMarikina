@@ -23,7 +23,19 @@ function store_image($file, $context = 'general') {
     }
     
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        return ['success' => false, 'path' => null, 'error' => 'Upload error: ' . $file['error']];
+        // Map PHP upload error codes to human-readable messages
+        $errCode = (int)$file['error'];
+        $errMap = [
+            UPLOAD_ERR_INI_SIZE   => 'The uploaded file exceeds the upload_max_filesize directive in php.ini',
+            UPLOAD_ERR_FORM_SIZE  => 'The uploaded file exceeds the MAX_FILE_SIZE directive specified in the HTML form',
+            UPLOAD_ERR_PARTIAL    => 'The uploaded file was only partially uploaded',
+            UPLOAD_ERR_NO_FILE    => 'No file was uploaded',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder on the server',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk (permissions)',
+            UPLOAD_ERR_EXTENSION  => 'A PHP extension stopped the file upload',
+        ];
+        $msg = isset($errMap[$errCode]) ? $errMap[$errCode] : ('Upload error code ' . $errCode);
+        return ['success' => false, 'path' => null, 'error' => $msg];
     }
     
     // Validate file type
@@ -61,12 +73,17 @@ function store_image($file, $context = 'general') {
     // Check if we should use cloud storage or local fallback
     $storageMethod = getenv('STORAGE_METHOD') ?: 'local';
     
-    // If Cloudinary is selected but credentials are missing, surface a clear error
+    // If Cloudinary is selected but credentials are missing, fall back to base64 (keeps app functional on Wasmer)
     if ($storageMethod === 'cloudinary') {
         $cn = getenv('CLOUDINARY_CLOUD_NAME');
         $ck = getenv('CLOUDINARY_API_KEY');
         $cs = getenv('CLOUDINARY_API_SECRET');
         if (!$cn || !$ck || !$cs) {
+            // Graceful fallback for ephemeral FS environments without configured cloud storage
+            $fallback = store_as_base64($file, $mime);
+            if ($fallback['success']) {
+                return $fallback + ['note' => 'Stored as base64 (Cloudinary not configured)'];
+            }
             return ['success' => false, 'path' => null, 'error' => 'Cloudinary not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.'];
         }
     }
@@ -249,8 +266,8 @@ function store_to_cloudinary($file, $context, $ext) {
         return store_locally($file, $context, $ext);
     }
     
-    // Generate unique public ID
-    $publicId = $context . '/' . bin2hex(random_bytes(8));
+    // Generate unique public ID (folder provided separately to avoid double-prefixing)
+    $publicId = bin2hex(random_bytes(8));
     
     // Create timestamp for signature
     $timestamp = time();
@@ -339,9 +356,23 @@ function store_to_cloudinary($file, $context, $ext) {
             return ['success' => false, 'path' => null, 'error' => 'Upload succeeded but no URL returned'];
         }
     } else {
-        error_log("Cloudinary upload failed: HTTP $httpCode - $response - $curlError");
-        $msg = $httpCode ? "Cloudinary upload failed: HTTP $httpCode" : 'Cloudinary upload failed';
-        return ['success' => false, 'path' => null, 'error' => $msg];
+        // Improve diagnostics and ALWAYS fall back to base64 so required-photo flows can proceed
+        $diagMsg = $httpCode ? "Cloudinary upload failed: HTTP $httpCode" : 'Cloudinary upload failed';
+        if ($httpCode === 401) {
+            $diagMsg .= ' (invalid API key/secret, cloud name, or signature params)';
+        } elseif ($httpCode === 400) {
+            $diagMsg .= ' (bad request – check file field, folder/public_id, or preset)';
+        }
+        error_log($diagMsg . " - Body: $response - cURL: $curlError");
+
+        // Unconditional fallback to base64
+        $mime = $file['type'] ?? 'application/octet-stream';
+        $fb = store_as_base64($file, $mime);
+        if ($fb['success']) {
+            return $fb + ['note' => $diagMsg . ' · used base64 fallback'];
+        }
+        // If fallback also failed, return original error
+        return ['success' => false, 'path' => null, 'error' => $diagMsg];
     }
 }
 

@@ -37,6 +37,7 @@ $description = field('description');
 $location = field('location');
 
 $errors = [];
+$warnings = [];
 if ($category === '') $errors[] = 'Category is required';
 if ($title === '') $errors[] = 'Title is required';
 if ($description === '') $errors[] = 'Description is required';
@@ -60,31 +61,31 @@ if (isset($_POST['location_lng']) && $_POST['location_lng'] !== '') {
     }
 }
 
-// Optional photo upload using storage helper
+// Photo upload using storage helper (photo is REQUIRED)
 require_once __DIR__ . '/../includes/storage_helper.php';
 
 $imagePath = null;
 
-// Only validate/process if user actually attempted an upload
-if (isset($_FILES['photo'])) {
+// Require a photo to be provided
+if (!isset($_FILES['photo'])) {
+    $errors[] = 'Photo is required';
+} else {
     $file = $_FILES['photo'];
-    // If no file was provided, ignore (optional)
     if (isset($file['error']) && $file['error'] === UPLOAD_ERR_NO_FILE) {
-        // no-op; photo is optional
+        $errors[] = 'Photo is required';
     } else {
-        // If tmp_name exists and is uploaded, process normally
         if (!empty($file['tmp_name']) && is_uploaded_file($file['tmp_name'])) {
             $result = store_image($file, 'reports');
             if (!$result['success']) {
-                $errors[] = $result['error'];
+                $errors[] = 'Photo upload failed: ' . ($result['error'] ?? 'unknown error');
             } else {
                 $imagePath = $result['path'];
+                if (!empty($result['note'])) {
+                    $warnings[] = (string)$result['note'];
+                }
             }
         } else {
-            // If tmp_name not present but error not NO_FILE, treat as upload failure
-            if (isset($file['error']) && $file['error'] !== UPLOAD_ERR_NO_FILE) {
-                $errors[] = 'Photo upload failed';
-            }
+            $errors[] = 'Photo upload failed';
         }
     }
 }
@@ -201,7 +202,9 @@ try {
     }
     $_SESSION['reports'][] = $report;
 
-    echo json_encode(['success' => true, 'message' => 'Report created successfully', 'report' => $report]);
+    $payload = ['success' => true, 'message' => 'Report created successfully', 'report' => $report];
+    if (!empty($warnings)) { $payload['warnings'] = $warnings; }
+    echo json_encode($payload);
   
     // Create a notification for the user (if logged in)
         try {

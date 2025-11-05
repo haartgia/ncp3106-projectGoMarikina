@@ -226,3 +226,32 @@ if (!function_exists('truncate_text')) {
     }
 }
 
+if (!function_exists('safe_image_src')) {
+    /**
+     * Return a safe image src or empty string if not resolvable.
+     * - Allows absolute URLs (http/https) and data URIs.
+     * - For relative paths like uploads/..., checks file exists before returning.
+     */
+    function safe_image_src(?string $path): string
+    {
+        $s = trim((string)$path);
+        if ($s === '') return '';
+        
+        // Absolute URL or data URI
+        if (preg_match('#^(https?:)?//#', $s) || str_starts_with($s, 'data:')) {
+            return $s;
+        }
+        
+        // Relative to project root
+        if (str_starts_with($s, 'uploads/')) {
+            $abs = __DIR__ . '/../' . $s;
+            if (file_exists($abs)) {
+                return $s; // serve as-is
+            }
+            return '';
+        }
+        
+        return '';
+    }
+}
+

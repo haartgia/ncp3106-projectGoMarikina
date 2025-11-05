@@ -165,7 +165,8 @@ if (is_logged_in()) {
                                     $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                     $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
                                     $submittedAttr = htmlspecialchars(format_datetime_display($report['created_at'] ?? null), ENT_QUOTES, 'UTF-8');
-                                    $imageAttr = !empty($report['image_path']) ? htmlspecialchars($report['image_path'], ENT_QUOTES, 'UTF-8') : '';
+                                    $safeSrc = function_exists('safe_image_src') ? safe_image_src($report['image_path'] ?? null) : ($report['image_path'] ?? '');
+                                    $imageAttr = $safeSrc !== '' ? htmlspecialchars($safeSrc, ENT_QUOTES, 'UTF-8') : '';
                                     $summaryFull = htmlspecialchars((string)($report['description'] ?? ''), ENT_QUOTES, 'UTF-8');
 
                                     // Shorter card preview: reduce to 40 characters and

@@ -311,7 +311,9 @@ $reportsPage = array_slice($reports, $offset, $perPage);
                                 $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                 $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
                                 $submittedAttr = htmlspecialchars($submittedDisplay, ENT_QUOTES, 'UTF-8');
-                                $imageAttr = $imagePath ? htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8') : '';
+                                // Prefer Cloudinary/absolute or data URIs. For local uploads, only render if the file exists.
+                                $safeSrc = function_exists('safe_image_src') ? safe_image_src($imagePath) : ($imagePath ?? '');
+                                $imageAttr = $safeSrc !== '' ? htmlspecialchars($safeSrc, ENT_QUOTES, 'UTF-8') : '';
                                 $ariaLabel = htmlspecialchars('View report details for ' . ($report['title'] ?? 'Citizen report'), ENT_QUOTES, 'UTF-8');
                             ?>
                             <article

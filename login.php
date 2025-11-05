@@ -56,7 +56,12 @@ if ($user = $result->fetch_assoc()) {
             'role' => $role,
         ];
         unset($_SESSION['login_error']);
-        header('Location: ' . $redirect);
+        // Admins go straight to the admin panel; users go to provided redirect
+        if ($role === 'admin') {
+            header('Location: admin.php');
+        } else {
+            header('Location: ' . $redirect);
+        }
         exit;
     } else {
         $_SESSION['login_error'] = 'Invalid password.';

@@ -2581,6 +2581,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
+  // Admin: wire Archive buttons to API (no full-page reload)
+  (function initAdminArchiveWiring() {
+    const forms = Array.from(document.querySelectorAll('.admin-inline-form'));
+    if (!forms.length) return;
+
+    forms.forEach((form) => {
+      const actionInput = form.querySelector('input[name="action"][value="archive_report"]');
+      if (!actionInput) return;
+
+      // Bypass the global confirm-on-submit handler; we'll handle confirm here
+      try { form.removeAttribute('data-confirm-message'); } catch (e) {}
+
+      const btn = form.querySelector('.admin-delete');
+      const idEl = form.querySelector('input[name="report_id"]');
+      const reportId = idEl ? String(idEl.value || '') : '';
+      const row = form.closest('tr');
+
+      const doArchive = async () => {
+        if (!reportId) return;
+        let ok = true;
+        if (window.GOMK && window.GOMK.confirmDialog) {
+          ok = await window.GOMK.confirmDialog('Archive this report?', { okText: 'Archive', cancelText: 'Cancel' });
+        } else { ok = window.confirm('Archive this report?'); }
+        if (!ok) return;
+
+        try {
+          const fd = new FormData();
+          fd.append('report_id', reportId);
+          const res = await fetch('api/report_archive.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) throw new Error(data.message || 'Failed to archive');
+          // Remove the row from the table
+          if (row && row.parentNode) row.parentNode.removeChild(row);
+          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast('Report archived', { type: 'success' });
+          // Refresh snapshot cards if available
+          try { window.GOMK && typeof window.GOMK.refreshAdminSnapshot === 'function' && window.GOMK.refreshAdminSnapshot(); } catch (e) {}
+        } catch (e) {
+          if (window.GOMK && window.GOMK.showToast) window.GOMK.showToast(e.message || 'There was a problem archiving the report.', { type: 'error' });
+          else alert(e.message || 'There was a problem archiving the report.');
+        }
+      };
+
+      btn?.addEventListener('click', (ev) => { ev.preventDefault(); doArchive(); });
+      form.addEventListener('submit', (ev) => { ev.preventDefault(); doArchive(); });
+    });
+  })();
+
   // Admin: live snapshot updater for Operations snapshot
   (function initAdminSnapshotLive() {
     const totalEl = document.querySelector('[data-snap-total]');

@@ -131,8 +131,12 @@ try {
         $hasLatLng = false;
     }
 
+    // Only include latitude/longitude in INSERT when BOTH values are present.
+    // This avoids binding NULL to 'd' (double) parameters which throws in DEBUG mode.
+    $useLatLng = $hasLatLng && ($latitude !== null) && ($longitude !== null);
+
     // Build and run the appropriate INSERT
-    if ($hasLatLng) {
+    if ($useLatLng) {
         if ($hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }
@@ -152,6 +156,7 @@ try {
         }
     } else {
     // Fallback path for schemas without latitude/longitude columns
+    // or when only one of lat/lng is provided (store as NULLs by omitting them)
         if ($hasUser && $hasImage) {
             $stmt = $conn->prepare('INSERT INTO reports (user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
             if (!$stmt) { throw new Exception('SQL prepare failed: ' . $conn->error); }

@@ -20,6 +20,11 @@
  * - 4xx/5xx: { success: false, message: string }
  */
 
+// Ensure responses and downstream fetches are never cached; helps immediate visibility
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -97,6 +102,8 @@ if (isset($_FILES['photo'])) {
                     if (!move_uploaded_file($file['tmp_name'], $target)) {
                         $errors[] = 'Failed to store uploaded image.';
                     } else {
+                        // Ensure uploaded file is readable by the web server immediately
+                        @chmod($target, 0644);
                         $imagePath = $publicBase . '/' . $basename;
                     }
                 }

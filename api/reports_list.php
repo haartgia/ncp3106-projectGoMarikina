@@ -16,6 +16,11 @@
  * - 500: { success: false, message }
  */
 
+// Avoid caching so new reports and images appear immediately for clients
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 require_once __DIR__ . '/../includes/api_bootstrap.php';
 
 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
@@ -52,6 +57,13 @@ try {
 
     $rows = [];
     while ($r = $res->fetch_assoc()) {
+        // Add a cache-busting version param derived from created_at for immediate freshness
+        $img = $r['image_path'];
+        $ver = 0;
+        try {
+            $ver = $r['created_at'] ? @strtotime($r['created_at']) : time();
+        } catch (Throwable $e) { $ver = time(); }
+        $imgWithV = $img ? ($img . '?v=' . $ver) : null;
         $rows[] = [
             'id' => (int)$r['id'],
             'title' => $r['title'],
@@ -61,7 +73,7 @@ try {
             'location' => $r['location'],
             'submitted_at' => $r['created_at'],
             'summary' => $r['description'],
-            'image' => $r['image_path'],
+            'image' => $imgWithV,
             'tags' => [],
         ];
     }

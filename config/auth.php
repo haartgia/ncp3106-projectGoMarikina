@@ -1,5 +1,48 @@
 <?php
+// Hardened, hosted-friendly session bootstrap
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Detect HTTPS behind proxies (Cloudflare/ELB/etc.)
+    $isHttps = (
+        (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+        (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) ||
+        (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') ||
+        (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on')
+    );
+
+    // Normalize cookie domain (strip port)
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    if ($host) {
+        $host = preg_replace('/[:]\d+$/', '', $host);
+    }
+
+    // Use a stable custom session name to avoid collisions with other apps on the same host
+    if (!headers_sent()) {
+        @session_name('GOMKSESSID');
+    }
+
+    // Configure cookie params with SameSite and Secure where applicable
+    $cookieParams = [
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => $host ?: '',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax', // Safe default for regular navigation
+    ];
+
+    // Apply cookie params (PHP >= 7.3 supports array with samesite)
+    if (PHP_VERSION_ID >= 70300) {
+        @session_set_cookie_params($cookieParams);
+    } else {
+        // Fallback for very old PHP: best-effort via ini settings (no explicit samesite)
+        @ini_set('session.cookie_secure', $isHttps ? '1' : '0');
+        @ini_set('session.cookie_httponly', '1');
+        if ($host) { @ini_set('session.cookie_path', '/'); @ini_set('session.cookie_domain', $host); }
+    }
+
+    // Use strict mode to prevent uninitialized session fixation
+    @ini_set('session.use_strict_mode', '1');
+
     session_start();
 }
 

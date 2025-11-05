@@ -273,6 +273,13 @@ $reportsPage = array_slice($reports, $offset, $perPage);
 
                                 $submittedDisplay = format_datetime_display($report['submitted_at'] ?? null);
                                 $imagePath = $report['image'] ?? null;
+                                // Add a cache-busting version to image URLs so newly uploaded photos appear immediately
+                                $versionParam = '';
+                                try {
+                                    $ts = $report['submitted_at'] ?? null;
+                                    $ver = $ts ? @strtotime($ts) : time();
+                                    if ($ver) { $versionParam = '?v=' . $ver; }
+                                } catch (Throwable $e) { $versionParam = '?v=' . time(); }
                                 $titleRaw = (string)($report['title'] ?? 'Citizen report');
                                 $titleDisplay = htmlspecialchars($titleRaw, ENT_QUOTES, 'UTF-8');
                                 // Card heading should be a fixed-length preview (30 chars + ...)
@@ -311,7 +318,7 @@ $reportsPage = array_slice($reports, $offset, $perPage);
                                 $statusLabelDisplay = htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8');
                                 $statusModifierDisplay = htmlspecialchars($statusModifier, ENT_QUOTES, 'UTF-8');
                                 $submittedAttr = htmlspecialchars($submittedDisplay, ENT_QUOTES, 'UTF-8');
-                                $imageAttr = $imagePath ? htmlspecialchars($imagePath, ENT_QUOTES, 'UTF-8') : '';
+                                $imageAttr = $imagePath ? htmlspecialchars($imagePath . $versionParam, ENT_QUOTES, 'UTF-8') : '';
                                 $ariaLabel = htmlspecialchars('View report details for ' . ($report['title'] ?? 'Citizen report'), ENT_QUOTES, 'UTF-8');
                             ?>
                             <article
@@ -387,7 +394,7 @@ $reportsPage = array_slice($reports, $offset, $perPage);
                                 <?php endif; ?>
                                 <?php if ($imageAttr !== ''): ?>
                                     <figure class="report-media aspect-8-4">
-                                        <img src="<?php echo $imageAttr; ?>" alt="<?php echo htmlspecialchars(($report['title'] ?? 'Report') . ' photo', ENT_QUOTES, 'UTF-8'); ?>">
+                                        <img src="<?php echo $imageAttr; ?>" alt="<?php echo htmlspecialchars(($report['title'] ?? 'Report') . ' photo', ENT_QUOTES, 'UTF-8'); ?>" loading="lazy" decoding="async">
                                     </figure>
                                 <?php else: ?>
                                     <figure class="report-media report-media--placeholder" aria-hidden="true">

@@ -180,7 +180,62 @@ try {
     if (!$stmt->execute()) {
         $err = $stmt->error ?: $conn->error;
         $stmt->close();
-        throw new Exception($err);
+
+        // Fallback: If reports.id is not AUTO_INCREMENT, compute next id and retry insert including explicit id.
+        if (stripos($err, "doesn't have a default value") !== false && stripos($err, "'id'") !== false) {
+            $res = $conn->query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM reports');
+            $nextId = 1;
+            if ($res) { $row = $res->fetch_assoc(); $nextId = (int)($row['next_id'] ?? 1); $res->close(); }
+
+            // Rebuild INSERT with explicit id column
+            if ($hasLatLng) {
+                if ($hasUser && $hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('iisssssdd', $nextId, $userId, $title, $category, $description, $location, $imagePath, $latSafe, $lngSafe);
+                } elseif ($hasUser && !$hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('iissssdd', $nextId, $userId, $title, $category, $description, $location, $latSafe, $lngSafe);
+                } elseif (!$hasUser && $hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('isssssdd', $nextId, $title, $category, $description, $location, $imagePath, $latSafe, $lngSafe);
+                } else { // no user, no image
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, latitude, longitude, status, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, NULL, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('issssdd', $nextId, $title, $category, $description, $location, $latSafe, $lngSafe);
+                }
+            } else {
+                if ($hasUser && $hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('iisssss', $nextId, $userId, $title, $category, $description, $location, $imagePath);
+                } elseif ($hasUser && !$hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('iissss', $nextId, $userId, $title, $category, $description, $location);
+                } elseif (!$hasUser && $hasImage) {
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('isssss', $nextId, $title, $category, $description, $location, $imagePath);
+                } else { // no user, no image
+                    $stmt = $conn->prepare('INSERT INTO reports (id, user_id, title, category, description, location, image_path, status, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, NULL, "unresolved", NOW(), NOW())');
+                    if (!$stmt) { throw new Exception('SQL prepare failed (fallback): ' . $conn->error); }
+                    $stmt->bind_param('issss', $nextId, $title, $category, $description, $location);
+                }
+            }
+
+            if (!$stmt->execute()) {
+                $err2 = $stmt->error ?: $conn->error;
+                $stmt->close();
+                throw new Exception($err . ' | fallback failed: ' . $err2);
+            }
+            $newId = $stmt->insert_id ?: $nextId;
+            $stmt->close();
+        } else {
+            throw new Exception($err);
+        }
     }
     $newId = $stmt->insert_id;
     $stmt->close();

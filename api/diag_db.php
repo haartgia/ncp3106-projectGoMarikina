@@ -22,7 +22,16 @@ function columns(mysqli $conn, string $name): array {
     try {
         $res = $conn->query("SHOW COLUMNS FROM `" . $conn->real_escape_string($name) . "`");
         if ($res) {
-            while ($row = $res->fetch_assoc()) { $cols[] = $row['Field']; }
+            while ($row = $res->fetch_assoc()) {
+                $cols[] = [
+                    'field' => $row['Field'] ?? null,
+                    'type' => $row['Type'] ?? null,
+                    'null' => $row['Null'] ?? null,
+                    'key' => $row['Key'] ?? null,
+                    'default' => $row['Default'] ?? null,
+                    'extra' => $row['Extra'] ?? null,
+                ];
+            }
             $res->close();
         }
     } catch (Throwable $e) {}

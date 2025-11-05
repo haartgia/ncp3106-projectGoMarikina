@@ -16,9 +16,9 @@ if ($email === '' || $password === '') {
     exit;
 }
 
-//  Admin login
-if ($email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
-    // Regenerate session ID on privilege change/login
+// Optional legacy admin login (disabled by default in prod). Enable by setting env ALLOW_LEGACY_ADMIN=1
+$__ALLOW_LEGACY_ADMIN = getenv('ALLOW_LEGACY_ADMIN') === '1';
+if ($__ALLOW_LEGACY_ADMIN && $email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
     if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
     $_SESSION['user'] = [
         'id' => 0,
@@ -32,19 +32,28 @@ if ($email === ADMIN_EMAIL && $password === ADMIN_PASSWORD) {
 }
 
 //  Regular user login
-$stmt = $conn->prepare("SELECT id, first_name, last_name, email, password, mobile FROM users WHERE email = ?");
+$hasRole = false;
+try {
+    $chk = $conn->query("SHOW COLUMNS FROM users LIKE 'role'");
+    $hasRole = ($chk && $chk->num_rows > 0);
+    if ($chk) { $chk->close(); }
+} catch (Throwable $e) { $hasRole = false; }
+
+$cols = 'id, first_name, last_name, email, password, mobile' . ($hasRole ? ', role' : '');
+$stmt = $conn->prepare("SELECT $cols FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);
 $stmt->execute();
 $result = $stmt->get_result();
 
 if ($user = $result->fetch_assoc()) {
     if (password_verify($password, $user['password'])) {
+        $role = ($hasRole && isset($user['role']) && $user['role']) ? $user['role'] : 'user';
         if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
         $_SESSION['user'] = [
             'id' => $user['id'],
             'email' => $user['email'],
             'name' => $user['first_name'] . ' ' . $user['last_name'],
-            'role' => 'user',
+            'role' => $role,
         ];
         unset($_SESSION['login_error']);
         header('Location: ' . $redirect);

@@ -21,6 +21,8 @@ if (!in_array('ob_gzhandler', ob_list_handlers())) {
 }
 
 header('Content-Type: application/json; charset=utf-8');
+// These responses are safe to cache for a very short time by intermediaries
+header('Cache-Control: public, max-age=5');
 
 try {
     // Optional bounding box parameters to restrict returned reports to viewport
@@ -29,6 +31,24 @@ try {
     $maxLat = isset($_GET['maxLat']) ? $_GET['maxLat'] : (isset($_GET['north']) ? $_GET['north'] : null);
     $minLng = isset($_GET['minLng']) ? $_GET['minLng'] : (isset($_GET['west']) ? $_GET['west'] : null);
     $maxLng = isset($_GET['maxLng']) ? $_GET['maxLng'] : (isset($_GET['east']) ? $_GET['east'] : null);
+
+    // Normalize degenerate bounding boxes (identical north/south/east/west)
+    // Expand to a tiny window so we can leverage indexes instead of scanning full table
+    $eps = 0.0008; // ~90m latitude; acceptable for a point lookup region on city map
+    if ($minLat !== null && $maxLat !== null && is_numeric($minLat) && is_numeric($maxLat)) {
+        if (abs(floatval($minLat) - floatval($maxLat)) < 1e-12) {
+            $c = floatval($minLat);
+            $minLat = $c - $eps;
+            $maxLat = $c + $eps;
+        }
+    }
+    if ($minLng !== null && $maxLng !== null && is_numeric($minLng) && is_numeric($maxLng)) {
+        if (abs(floatval($minLng) - floatval($maxLng)) < 1e-12) {
+            $c = floatval($minLng);
+            $minLng = $c - $eps;
+            $maxLng = $c + $eps;
+        }
+    }
 
     $where = ['latitude IS NOT NULL', 'longitude IS NOT NULL'];
 
@@ -39,6 +59,23 @@ try {
     if ($minLng !== null && is_numeric($minLng)) { $where[] = 'longitude >= ' . floatval($minLng); }
     if ($maxLng !== null && is_numeric($maxLng)) { $where[] = 'longitude <= ' . floatval($maxLng); }
 
+    // Micro-cache identical queries for a few seconds using APCu when available
+    $cacheKey = null;
+    if (function_exists('apcu_fetch')) {
+        $bboxKey = implode(',', [
+            is_numeric($minLat) ? number_format((float)$minLat, 6, '.', '') : 'x',
+            is_numeric($maxLat) ? number_format((float)$maxLat, 6, '.', '') : 'x',
+            is_numeric($minLng) ? number_format((float)$minLng, 6, '.', '') : 'x',
+            is_numeric($maxLng) ? number_format((float)$maxLng, 6, '.', '') : 'x',
+        ]);
+        $cacheKey = 'gomk:reports:' . $bboxKey;
+        $cached = @call_user_func('apcu_fetch', $cacheKey);
+        if ($cached !== false) {
+            echo $cached;
+            exit;
+        }
+    }
+
     // Return extra fields useful for map popups/modal so the client can show
     // a richer preview without additional round-trips.
     $sql = 'SELECT id, title, category, description, location, image_path, latitude, longitude, status, created_at FROM reports';
@@ -46,7 +83,8 @@ try {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
     // Limit returned rows to a reasonable number to avoid huge payloads
-    $sql .= ' ORDER BY created_at DESC LIMIT 1000';
+    // Reduce the default LIMIT; 300 is typically sufficient for a city-viewport feed
+    $sql .= ' ORDER BY created_at DESC LIMIT 300';
 
     $res = $conn->query($sql);
     $rows = [];
@@ -70,7 +108,9 @@ try {
     // Suggest database indexes for better performance (not applied here):
     // ALTER TABLE reports ADD INDEX idx_latitude (latitude), ADD INDEX idx_longitude (longitude);
 
-    echo json_encode(['success' => true, 'data' => $rows]);
+    $out = json_encode(['success' => true, 'data' => $rows]);
+    if ($cacheKey && function_exists('apcu_store')) { @call_user_func('apcu_store', $cacheKey, $out, 5); }
+    echo $out;
     exit;
 } catch (Throwable $e) {
     http_response_code(500);

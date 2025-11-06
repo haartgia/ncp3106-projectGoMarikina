@@ -27,6 +27,7 @@ if ($__ALLOW_LEGACY_ADMIN && $email === ADMIN_EMAIL && $password === ADMIN_PASSW
         'role' => 'admin',
     ];
     unset($_SESSION['login_error']);
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
     header('Location: admin.php');
     exit;
 }
@@ -58,8 +59,10 @@ if ($user = $result->fetch_assoc()) {
         unset($_SESSION['login_error']);
         // Admins go straight to the admin panel; users go to provided redirect
         if ($role === 'admin') {
+            if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
             header('Location: admin.php');
         } else {
+            if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
             header('Location: ' . $redirect);
         }
         exit;
@@ -73,5 +76,6 @@ if ($user = $result->fetch_assoc()) {
 $stmt->close();
 $conn->close();
 
+if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
 header('Location: ' . $redirect);
 exit;

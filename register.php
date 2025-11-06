@@ -95,6 +95,7 @@ if ($stmt->execute()) {
     ];
 
     unset($_SESSION['login_error']);
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
     header('Location: profile.php');
     exit;
 } else {
@@ -104,6 +105,7 @@ if ($stmt->execute()) {
     $_SESSION['login_error'] = $DBG && $detail
         ? ('Error creating account: ' . $detail)
         : 'Error creating account. Please try again.';
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_write_close(); }
     header('Location: profile.php');
     exit;
 }

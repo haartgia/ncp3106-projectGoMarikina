@@ -494,6 +494,9 @@ document.addEventListener('DOMContentLoaded', () => {
         cache: 'no-store',
         keepalive: true,
         headers: { 'Accept': 'application/json' }
+      }).then(() => {
+        // Optionally refresh session cookie via a lightweight no-op by touching document.cookie (no value change) —
+        // browsers will keep the session cookie alive due to server Set-Cookie on ping.
       }).catch(() => {/* silent */});
     };
 

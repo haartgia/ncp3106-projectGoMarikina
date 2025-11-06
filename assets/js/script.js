@@ -303,10 +303,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const inner = root.querySelector('.carousel-inner');
     if (!inner) return;
-    const items = Array.from(inner.querySelectorAll('.carousel-item'));
-    const indicators = Array.from(root.querySelectorAll('.carousel-indicators button'));
-    const btnPrev = root.querySelector('.carousel-control-prev');
-    const btnNext = root.querySelector('.carousel-control-next');
+  const items = Array.from(inner.querySelectorAll('.carousel-item'));
+  // Support both legacy dot indicators and new numeric pagination
+  const dotIndicators = Array.from(root.querySelectorAll('.carousel-indicators button'));
+  const pageIndicators = Array.from(root.querySelectorAll('.carousel-pagination .pager-btn[data-index]'));
+  const indicators = pageIndicators.length ? pageIndicators : dotIndicators;
+  const btnPrev = root.querySelector('.carousel-pagination .pager-btn[data-prev]') || root.querySelector('.carousel-control-prev');
+  const btnNext = root.querySelector('.carousel-pagination .pager-btn[data-next]') || root.querySelector('.carousel-control-next');
     if (!items.length) return;
 
     let current = items.findIndex(i => i.classList.contains('active'));
@@ -328,9 +331,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
+    const setDisabled = (el, disabled) => {
+      if (!el) return;
+      try {
+        el.disabled = !!disabled;
+        if (disabled) el.setAttribute('aria-disabled', 'true');
+        else el.removeAttribute('aria-disabled');
+      } catch (e) { /* ignore */ }
+    };
+
+    const updateNavState = () => {
+      setDisabled(btnPrev, current <= 0);
+      setDisabled(btnNext, current >= items.length - 1);
+    };
+
     const show = (index, resetTimer = true) => {
-      index = (index + items.length) % items.length;
-      if (index === current) return; // No change needed
+      // Clamp – no looping
+      if (index < 0 || index >= items.length) {
+        updateNavState();
+        return false; // no change
+      }
+      if (index === current) { updateNavState(); return false; }
       
       // Reset auto-slide timer when manually navigating
       if (resetTimer && autoSlideInterval) {
@@ -366,23 +387,36 @@ document.addEventListener('DOMContentLoaded', () => {
       newItem.classList.add('active');
       newItem.setAttribute('aria-hidden', 'false');
       
-      // Update indicators
+      // Update indicators (numeric or dots)
       indicators.forEach((btn, i) => {
-        if (i === index) { btn.classList.add('active'); btn.setAttribute('aria-current', 'true'); }
-        else { btn.classList.remove('active'); btn.removeAttribute('aria-current'); }
+        const isActive = i === index;
+        if (isActive) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-current', 'true');
+        } else {
+          btn.classList.remove('active');
+          btn.removeAttribute('aria-current');
+        }
       });
       current = index;
+      updateNavState();
+      return true;
     };
     
     // Set initial height
     adjustCarouselHeight();
 
-    // Prev / Next handlers (buttons removed, but keep for potential future use)
-    btnPrev && btnPrev.addEventListener('click', (e) => { e.preventDefault(); show(current - 1); });
-    btnNext && btnNext.addEventListener('click', (e) => { e.preventDefault(); show(current + 1); });
+    // Prev / Next handlers
+  btnPrev && btnPrev.addEventListener('click', (e) => { e.preventDefault(); show(current - 1); });
+  btnNext && btnNext.addEventListener('click', (e) => { e.preventDefault(); show(current + 1); });
 
-    // Indicators
-    indicators.forEach((btn, i) => btn.addEventListener('click', (e) => { e.preventDefault(); show(i); }));
+    // Indicators (numeric buttons carry data-index; dots rely on position)
+    indicators.forEach((btn, i) => btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const idxAttr = btn.getAttribute('data-index');
+      const targetIndex = idxAttr !== null ? parseInt(idxAttr, 10) : i;
+      show(targetIndex);
+    }));
 
     // Keyboard navigation
     root.addEventListener('keydown', (e) => {
@@ -410,7 +444,9 @@ document.addEventListener('DOMContentLoaded', () => {
       stopAutoSlide();
       const interval = parseInt(root.getAttribute('data-bs-interval')) || 10000;
       autoSlideInterval = setInterval(() => {
-        show(current + 1, false);
+        const advanced = show(current + 1, false);
+        // Stop auto-slide when reaching the last slide
+        if (!advanced) stopAutoSlide();
       }, interval);
     };
 
@@ -435,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Ensure initial state and start auto-slide
-    show(current, false); // Don't reset timer on initial load
+    show(current, false); // Don't reset timer on initial load; also updates nav
     if (items.length > 1) {
       startAutoSlide();
     }

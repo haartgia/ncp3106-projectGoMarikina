@@ -230,27 +230,37 @@ if (!function_exists('safe_image_src')) {
     /**
      * Return a safe image src or empty string if not resolvable.
      * - Allows absolute URLs (http/https) and data URIs.
-     * - For relative paths like uploads/..., checks file exists before returning.
+     * - For relative uploads paths, accepts any of: "uploads/...", "/uploads/...", "./uploads/..." (normalizes),
+     *   and verifies the file exists before returning.
      */
     function safe_image_src(?string $path): string
     {
         $s = trim((string)$path);
         if ($s === '') return '';
-        
+
         // Absolute URL or data URI
-        if (preg_match('#^(https?:)?//#', $s) || str_starts_with($s, 'data:')) {
+        if (preg_match('#^(https?:)?//#i', $s) || str_starts_with($s, 'data:')) {
             return $s;
         }
-        
-        // Relative to project root
-        if (str_starts_with($s, 'uploads/')) {
-            $abs = __DIR__ . '/../' . $s;
+
+        // Normalize slashes and leading characters for relative paths
+        $norm = str_replace('\\', '/', $s);
+        // Trim leading "./" and leading slashes
+        $norm = ltrim($norm, '/');
+        if (str_starts_with($norm, './')) {
+            $norm = substr($norm, 2);
+        }
+
+        // Handle uploads directory
+        if (str_starts_with($norm, 'uploads/')) {
+            $abs = __DIR__ . '/../' . $norm;
             if (file_exists($abs)) {
-                return $s; // serve as-is
+                // Always return a web-safe relative path without a leading slash
+                return $norm;
             }
             return '';
         }
-        
+
         return '';
     }
 }

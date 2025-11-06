@@ -482,7 +482,8 @@ document.addEventListener('DOMContentLoaded', () => {
 (function initSessionKeepAlive(){
   try {
     // Only run on same-origin pages; ping every 5 minutes
-    const PING_URL = (window.GOMK && window.GOMK.PING_URL) || '/api/ping.php';
+    // Use a relative default (api/ping.php) so it works when the app is served under a subfolder like /gomarikina/
+    const PING_URL = (window.GOMK && window.GOMK.PING_URL) || 'api/ping.php';
     const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
     const ping = () => {

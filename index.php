@@ -224,11 +224,11 @@ $reportsPage = array_slice($reports, $offset, $perPage);
                         </div>
                         <nav id="announcementsPager" class="pager carousel-pagination" aria-label="Announcements pagination">
                             <div class="pager-inner">
-                                <button type="button" class="pager-btn" data-prev="1" aria-label="Previous announcement">Prev</button>
+                                <button type="button" class="pager-btn" data-prev="1" aria-label="Previous announcement">‹ Prev</button>
                                 <?php foreach ($annRev as $i => $_): ?>
                                     <button type="button" class="pager-btn" data-index="<?php echo $i; ?>"<?php echo $i === 0 ? ' aria-current="true"' : ''; ?> aria-label="Go to announcement <?php echo ($i+1); ?>"><?php echo ($i+1); ?></button>
                                 <?php endforeach; ?>
-                                <button type="button" class="pager-btn" data-next="1" aria-label="Next announcement">Next</button>
+                                <button type="button" class="pager-btn" data-next="1" aria-label="Next announcement">Next ›</button>
                             </div>
                         </nav>
                     </div>

@@ -491,6 +491,13 @@ body.modal-open {
 .pager-btn[aria-disabled="true"] { opacity:.45; pointer-events:none; }
 .pager-info { font-size:13px; color:#475569; padding:0 6px; }
 
+/* Announcements carousel: ensure only the active slide captures clicks */
+.announcements-carousel .carousel-inner { position: relative; }
+.announcements-carousel .carousel-item { position: relative; }
+.announcements-carousel .carousel-item[aria-hidden="true"],
+.announcements-carousel .carousel-item-exiting { pointer-events: none; }
+.announcements-carousel .carousel-pagination { margin-top: 8px; }
+
 /* Smooth appearance for report cards when the page loads or content swaps */
 @keyframes cardFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .reports-list .report-card { animation: cardFadeUp .35s ease both; }

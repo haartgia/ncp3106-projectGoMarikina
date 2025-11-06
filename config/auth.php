@@ -89,7 +89,17 @@ function is_logged_in(): bool
 
 function is_admin(): bool
 {
-    return isset($_SESSION['user']) && ($_SESSION['user']['role'] ?? '') === 'admin';
+    if (!isset($_SESSION['user'])) return false;
+    $role = strtolower(trim((string)($_SESSION['user']['role'] ?? '')));
+    if (in_array($role, ['admin','administrator','superadmin','super_admin'], true)) return true;
+    // Optional override: allow specific emails to be treated as admin via env ADMIN_EMAILS="a@x.com,b@y.com"
+    $email = strtolower(trim((string)($_SESSION['user']['email'] ?? '')));
+    $adminEmails = getenv('ADMIN_EMAILS');
+    if ($adminEmails) {
+        $list = array_filter(array_map('trim', explode(',', strtolower($adminEmails))));
+        if ($email !== '' && in_array($email, $list, true)) return true;
+    }
+    return false;
 }
 
 function current_user(): ?array

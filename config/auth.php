@@ -20,12 +20,42 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         $lifetime = 60 * 60 * 24 * 7; // 604800 seconds
     }
 
-    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-    // Derive a stable cookie path (works when the app is mounted under a subfolder like /gomarikina)
-    $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '/');
-    $basePath = str_replace('\\', '/', rtrim(dirname($scriptName), '/\\'));
-    if ($basePath === '' || $basePath === '.' || $basePath === '\\') { $basePath = '/'; }
-    if ($basePath !== '/' && substr($basePath, -1) !== '/') { $basePath .= '/'; }
+    // Detect HTTPS robustly (supports proxies/CDNs)
+    $xfProto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $xfSsl   = strtolower((string)($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+    $cfVis   = (string)($_SERVER['HTTP_CF_VISITOR'] ?? ''); // e.g., {"scheme":"https"}
+    $cfHttps = stripos($cfVis, '"https"') !== false;
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || ($xfProto === 'https')
+        || ($xfSsl === 'on')
+        || $cfHttps;
+
+    // Derive a stable cookie path that works across the whole app folder
+    // Priority 1: allow override via env APP_BASE_PATH (e.g., "/gomarikina/")
+    $basePathEnv = getenv('APP_BASE_PATH');
+    $basePath = '';
+    if (is_string($basePathEnv) && $basePathEnv !== '') {
+        $bp = str_replace('\\', '/', trim($basePathEnv));
+        if ($bp === '' || $bp === '.' || $bp === '/') {
+            $basePath = '/';
+        } else {
+            if ($bp[0] !== '/') { $bp = '/' . $bp; }
+            if (substr($bp, -1) !== '/') { $bp .= '/'; }
+            $basePath = $bp;
+        }
+    } else {
+        // Priority 2: infer from script path by locating the project folder name
+        $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '/');
+        $projectFolder = basename(dirname(__DIR__)); // e.g., "gomarikina"
+        $needle = '/' . $projectFolder . '/';
+        if (strpos($scriptName, $needle) !== false) {
+            $basePath = $needle; // e.g., "/gomarikina/"
+        } else {
+            // Fallback: site root
+            $basePath = '/';
+        }
+    }
 
     // Only set cookie domain when it is a plain hostname (avoid setting for IPs)
     $host = (string)($_SERVER['HTTP_HOST'] ?? '');

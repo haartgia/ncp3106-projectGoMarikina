@@ -21,13 +21,24 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     }
 
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-    // Ensure cookies work across the whole site and are HTTP-only
-    // SameSite=Lax allows POST->redirect flows to carry the cookie
+    // Derive a stable cookie path (works when the app is mounted under a subfolder like /gomarikina)
+    $scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '/');
+    $basePath = str_replace('\\', '/', rtrim(dirname($scriptName), '/\\'));
+    if ($basePath === '' || $basePath === '.' || $basePath === '\\') { $basePath = '/'; }
+    if ($basePath !== '/' && substr($basePath, -1) !== '/') { $basePath .= '/'; }
+
+    // Only set cookie domain when it is a plain hostname (avoid setting for IPs)
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+    $host = preg_replace('/:\\d+$/', '', $host); // strip port
+    $isIp = (bool)preg_match('/^\d+\.\d+\.\d+\.\d+$/', $host);
+    $cookieDomain = $isIp || $host === 'localhost' || $host === '' ? '' : $host;
+
+    // Ensure cookies work across the app and are HTTP-only; SameSite=Lax supports POST->redirect
     if (function_exists('session_set_cookie_params')) {
         session_set_cookie_params([
             'lifetime' => $lifetime,
-            'path' => '/',
-            'domain' => '',
+            'path' => $basePath ?: '/',
+            'domain' => $cookieDomain,
             'secure' => $isHttps,
             'httponly' => true,
             'samesite' => 'Lax',
@@ -53,6 +64,19 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     // Avoid default cache limiter adding no-cache headers that can interfere with back/forward nav
     if (function_exists('session_cache_limiter')) { @session_cache_limiter(''); }
     session_start();
+    // Proactively refresh the cookie expiry on each request when using a finite lifetime
+    if ($lifetime > 0) {
+        try {
+            setcookie(session_name(), session_id(), [
+                'expires' => time() + (int)$lifetime,
+                'path' => $basePath ?: '/',
+                'domain' => $cookieDomain ?: '',
+                'secure' => $isHttps,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        } catch (Throwable $e) { /* ignore */ }
+    }
 }
 
 const ADMIN_EMAIL = 'admin';

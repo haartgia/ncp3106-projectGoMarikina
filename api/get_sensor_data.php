@@ -85,6 +85,26 @@ function saveSensorData($data) {
         $source = $data['source'] ?? 'esp32';
         $reading_timestamp = $data['timestamp'] ?? date('Y-m-d H:i:s');
         
+        // Light normalization for safety before insert
+        if (empty($water_percent) && !empty($flood_level)) {
+            $lvl = strtolower($flood_level);
+            if (strpos($lvl, 'level 3') !== false || strpos($lvl, 'full') !== false || strpos($lvl, 'waist') !== false) {
+                $water_percent = 100;
+            } elseif (strpos($lvl, 'level 2') !== false || strpos($lvl, 'knee') !== false) {
+                $water_percent = 66;
+            } elseif (strpos($lvl, 'level 1') !== false || strpos($lvl, 'gutter') !== false || strpos($lvl, 'low') !== false) {
+                $water_percent = 33;
+            } else {
+                $water_percent = 0;
+            }
+        }
+        $temperature = is_numeric($temperature) ? (float)$temperature : null;
+        $humidity    = is_numeric($humidity) ? (float)$humidity : null;
+        $water_percent = is_numeric($water_percent) ? (int)$water_percent : 0;
+        $air_quality = is_numeric($air_quality) ? (int)$air_quality : null;
+        $gas_analog  = is_numeric($gas_analog) ? (int)$gas_analog : null;
+        $gas_voltage = is_numeric($gas_voltage) ? (float)$gas_voltage : null;
+        
         $stmt = $db->prepare("
             INSERT INTO sensor_data 
             (barangay, device_ip, temperature, humidity, water_percent, flood_level, 
@@ -93,7 +113,7 @@ function saveSensorData($data) {
         ");
         
         $stmt->bind_param(
-            'ssddisisdsss',
+            'ssddisiidsss',
             $barangay, $device_ip, $temperature, $humidity, $water_percent, 
             $flood_level, $air_quality, $gas_analog, $gas_voltage, $status, 
             $source, $reading_timestamp

@@ -10,12 +10,22 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     } catch (Throwable $e) { $savePath = sys_get_temp_dir(); }
     if (is_string($savePath) && $savePath !== '') { @session_save_path($savePath); }
 
+    // Configure cookie + GC lifetime (env override supported)
+    $lifetime = 0; // default: session cookie (until browser is closed)
+    $envLifetime = getenv('SESSION_LIFETIME');
+    if ($envLifetime !== false && ctype_digit((string)$envLifetime)) {
+        $lifetime = max(0, (int)$envLifetime);
+    } else {
+        // Use a sensible default of 7 days for more persistent logins
+        $lifetime = 60 * 60 * 24 * 7; // 604800 seconds
+    }
+
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
     // Ensure cookies work across the whole site and are HTTP-only
     // SameSite=Lax allows POST->redirect flows to carry the cookie
     if (function_exists('session_set_cookie_params')) {
         session_set_cookie_params([
-            'lifetime' => 0,
+            'lifetime' => $lifetime,
             'path' => '/',
             'domain' => '',
             'secure' => $isHttps,
@@ -27,14 +37,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     if (function_exists('session_name')) {
         @session_name('GOMKSESSID');
     }
-    // Strengthen session behavior
+    // Strengthen session behavior and align GC to cookie lifetime
     if (function_exists('ini_set')) {
         @ini_set('session.use_strict_mode', '1');
         @ini_set('session.use_only_cookies', '1');
         @ini_set('session.cookie_httponly', '1');
         // Allow Lax cookie for top-level POST redirects; upgrade to Strict if app is fully same-site navigations
         @ini_set('session.cookie_samesite', 'Lax');
+        // Keep server-side session files around at least as long as the cookie
+        @ini_set('session.gc_maxlifetime', (string)max(1440, $lifetime));
+        // Reasonable GC defaults (1% probability)
+        @ini_set('session.gc_probability', '1');
+        @ini_set('session.gc_divisor', '100');
     }
+    // Avoid default cache limiter adding no-cache headers that can interfere with back/forward nav
+    if (function_exists('session_cache_limiter')) { @session_cache_limiter(''); }
     session_start();
 }
 

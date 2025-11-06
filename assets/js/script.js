@@ -442,6 +442,34 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 
+/* --- Session keep-alive (prevents unexpected logouts during long browsing) --- */
+(function initSessionKeepAlive(){
+  try {
+    // Only run on same-origin pages; ping every 5 minutes
+    const PING_URL = (window.GOMK && window.GOMK.PING_URL) || '/api/ping.php';
+    const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+    const ping = () => {
+      // Use keepalive so it can fire during page unload too (best effort)
+      fetch(PING_URL, {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        keepalive: true,
+        headers: { 'Accept': 'application/json' }
+      }).catch(() => {/* silent */});
+    };
+
+    // Initial delayed ping, then interval
+    setTimeout(ping, 20 * 1000); // first ping after 20s to avoid burst on load
+    setInterval(ping, INTERVAL_MS);
+
+    // Also ping when page becomes visible again after being hidden for a while
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
+    window.addEventListener('focus', ping);
+  } catch (e) { /* ignore */ }
+})();
+
 // Add bottom 'View all activity' bar
 // (Removed bottom activity bar per user request)
 
